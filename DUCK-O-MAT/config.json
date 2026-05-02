@@ -1,0 +1,16 @@
+{
+  "io_mode": "hw",
+
+  "enable_arduino": true,
+  "arduino_port": "Auto",
+  "arduino_baud": 115200,
+
+  "enable_pn532": true,
+  "pn532_i2c_bus": 1,
+  "pn532_poll_s": 0.01,
+
+  "inventory_id": "28.01.2026",
+  "expected_count": 100,
+  "window_before_ms": 500,
+  "window_after_ms": 200
+}

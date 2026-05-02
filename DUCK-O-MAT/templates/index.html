@@ -1,0 +1,459 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>DUCK-O-MAT – Inventur</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <style>
+    :root{
+      --bg:#0b1020;
+      --card:#111a33;
+      --card2:#0f1730;
+      --text:#e8eefc;
+      --muted:#a8b3d6;
+      --line:rgba(255,255,255,.10);
+      --ok:#22c55e;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+      --btn:#1e2a55;
+      --btn2:#26356b;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 20% 0%, #172557 0%, var(--bg) 50%) fixed;
+      color:var(--text);
+    }
+
+    .wrap{ max-width:1200px; margin: 22px auto; padding: 0 18px 28px; }
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:14px;
+      margin-bottom:14px;
+    }
+    .brand{
+      display:flex; flex-direction:column; gap:2px;
+    }
+    .brand h1{ margin:0; font-size:28px; letter-spacing:.5px; }
+    .brand .sub{ color:var(--muted); font-size:14px; }
+
+    .nav{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    /* Logos (neu): Abstand zwischen den Logos */
+    .logos{
+      display:flex;
+      align-items:center;
+      gap:12px;            /* <- Abstand zwischen Logos */
+      padding:8px 10px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background: rgba(255,255,255,.04);
+    }
+    .logos img{
+      height:40px;
+      width:auto;
+      display:block;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,.35));
+    }
+
+    .nav a{
+      color: var(--text);
+      text-decoration:none;
+      padding:10px 14px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background: rgba(255,255,255,.04);
+      white-space:nowrap;
+    }
+    .nav a:hover{ background: rgba(255,255,255,.07); }
+
+    .flash{ margin: 10px 0 14px; }
+    .flash .msg{
+      padding: 12px 14px;
+      border-radius: 14px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      box-shadow: var(--shadow);
+    }
+    .flash .ok{ border-color: rgba(34,197,94,.45); }
+    .flash .err{ border-color: rgba(239,68,68,.45); }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap:14px;
+    }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      padding:16px;
+      overflow:hidden;
+    }
+
+    .card h2{
+      margin:0 0 10px;
+      font-size:18px;
+      color: var(--text);
+      letter-spacing:.3px;
+    }
+
+    .kpis{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr); /* <- LS-Kachel entfernt, daher 3 */
+      gap:10px;
+      margin-top:10px;
+    }
+    .kpi{
+      background: rgba(0,0,0,.18);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px;
+      min-height:84px;
+    }
+    .kpi .label{ color:var(--muted); font-size:12px; margin-bottom:6px; }
+    .kpi .value{ font-size:30px; font-weight:800; letter-spacing:.5px; }
+    .kpi .hint{ color:var(--muted); font-size:12px; margin-top:4px; }
+
+    .bigrow{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:12px;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      padding:8px 12px;
+      background: rgba(0,0,0,.18);
+      color: var(--muted);
+      font-size:13px;
+    }
+    .dot{
+      width:10px; height:10px; border-radius:50%;
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(245,158,11,.15);
+    }
+    .dot.ok{ background: var(--ok); box-shadow:0 0 0 4px rgba(34,197,94,.18); }
+    .dot.bad{ background: var(--bad); box-shadow:0 0 0 4px rgba(239,68,68,.18); }
+
+    .controls{
+      display:grid;
+      grid-template-columns: repeat(2,1fr);
+      gap:10px;
+    }
+
+    .btn{
+      appearance:none;
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      color: var(--text);
+      padding: 12px 14px;
+      border-radius:16px;
+      font-size:16px;
+      cursor:pointer;
+      width:100%;
+    }
+    .btn:hover{ background: rgba(255,255,255,.08); }
+
+    .btn.primary{
+      border-color: rgba(34,197,94,.35);
+    }
+    .btn.danger{
+      border-color: rgba(239,68,68,.35);
+    }
+
+    .formgrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:8px;
+    }
+    label{ display:block; color:var(--muted); font-size:12px; margin-bottom:6px; }
+    input{
+      width:100%;
+      padding:12px 12px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      outline:none;
+      font-size:16px;
+    }
+
+    .last{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:10px;
+    }
+    .lastbox{
+      background: rgba(0,0,0,.18);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px;
+    }
+    .lastbox .title{
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:8px;
+    }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .small{ font-size:13px; color:var(--muted); }
+    .val{ font-size:16px; font-weight:700; }
+    .row2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+
+    .missing{
+      margin-top:10px;
+      background: rgba(0,0,0,.18);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px;
+    }
+    .missing .list{
+      margin-top:8px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .tag{
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:13px;
+      color:var(--text);
+      background: rgba(255,255,255,.03);
+    }
+
+    @media (max-width: 980px){
+      .grid{ grid-template-columns: 1fr; }
+      .kpis{ grid-template-columns: repeat(2,1fr); }
+      .controls{ grid-template-columns: 1fr; }
+      .formgrid{ grid-template-columns: 1fr; }
+      .row2{ grid-template-columns: 1fr; }
+      .nav{ flex-wrap:wrap; justify-content:flex-end; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>DUCK-O-MAT</h1>
+      <div class="sub">Inventur-Station (Kiosk)</div>
+    </div>
+
+    <div class="nav">
+      <!-- Logos: passe die Dateinamen an deine /static/ Dateien an -->
+      <div class="logos">
+        <img src="/static/tuhh.png" alt="TUHH">
+        <img src="/static/isem.png" alt="ISEM">
+        <img src="/static/odce.png" alt="ODCE">
+      </div>
+
+      <a href="/mapping">Mapping & Export</a>
+    </div>
+  </div>
+
+  <div id="flash" class="flash"></div>
+
+  <div class="grid">
+    <!-- LINKS: LIVE -->
+    <div class="card">
+      <h2>Live-Status</h2>
+
+      <div class="pill">
+        <span id="dot" class="dot"></span>
+        <span id="runningText">Status: …</span>
+        <span class="mono" id="invId" style="margin-left:10px;"></span>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">OK Reads</div>
+          <div class="value" id="ok_reads">0</div>
+          <div class="hint">UID gemappt</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Timeouts</div>
+          <div class="value" id="timeouts">0</div>
+          <div class="hint">kein RFID</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Unknown</div>
+          <div class="value" id="unknown_uids">0</div>
+          <div class="hint">UID nicht gemappt</div>
+        </div>
+      </div>
+
+      <div class="bigrow">
+        <div class="lastbox">
+          <div class="title">
+            <div><b>Letzte Ente</b></div>
+            <div class="pill" style="padding:6px 10px;">
+              <span id="lastBadgeDot" class="dot"></span>
+              <span id="lastBadgeText">—</span>
+            </div>
+          </div>
+
+          <div class="row2">
+            <div>
+              <div class="small">Seq</div>
+              <div class="val mono" id="last_seq">—</div>
+            </div>
+            <div>
+              <div class="small">Ergebnis</div>
+              <div class="val" id="last_result">—</div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <div class="small">Nummer</div>
+            <div class="val mono" id="last_number">—</div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <div class="small">UID</div>
+            <div class="val mono" id="last_uid" style="word-break:break-all;">—</div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <div class="small">Grund</div>
+            <div class="val" id="last_reason">—</div>
+          </div>
+        </div>
+
+        <div class="missing">
+          <div class="title" style="display:flex; justify-content:space-between; align-items:center;">
+            <div><b>Fehlend (Preview)</b></div>
+            <div class="pill" style="padding:6px 10px;">
+              <span class="dot bad" style="width:9px;height:9px;"></span>
+              <span>Missing: <span id="missing_count">0</span></span>
+            </div>
+          </div>
+          <div class="small">Zeigt nur die ersten 30. Vollständig über Export/DB.</div>
+          <div class="list" id="missing_list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECHTS: STEUERUNG + KONFIG -->
+    <div class="card">
+      <h2>Steuerung</h2>
+
+      <div class="controls">
+        <form method="post" action="/api/start"><button class="btn primary" type="submit">Start Inventur</button></form>
+        <form method="post" action="/api/stop"><button class="btn" type="submit">Stop</button></form>
+        <form method="post" action="/api/reset"><button class="btn" type="submit">Zähler Reset</button></form>
+        <form method="post" action="/api/shutdown"><button class="btn danger" type="submit">Shutdown (nur lokal)</button></form>
+      </div>
+
+      <div style="height:12px;"></div>
+
+      <h2>Konfiguration</h2>
+      <form method="post" action="/api/config">
+        <div class="formgrid">
+          <div>
+            <label>Inventur-ID</label>
+            <input name="inventory_id" placeholder="proto_01">
+          </div>
+          <div>
+            <label>Expected Count</label>
+            <input name="expected_count" placeholder="1000" inputmode="numeric">
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn" type="submit">Konfiguration speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const p = new URLSearchParams(location.search);
+  if (p.get("msg")) {
+    const ok = p.get("ok") === "1";
+    document.getElementById("flash").innerHTML =
+      `<div class="msg ${ok ? "ok" : "err"}">${p.get("msg")}</div>`;
+  }
+
+  function setDot(el, state){
+    el.classList.remove("ok","bad");
+    if(state==="ok") el.classList.add("ok");
+    if(state==="bad") el.classList.add("bad");
+  }
+
+  function updateMissing(list){
+    const box = document.getElementById("missing_list");
+    box.innerHTML = "";
+    (list || []).forEach(n=>{
+      const t = document.createElement("div");
+      t.className="tag";
+      t.textContent = n;
+      box.appendChild(t);
+    });
+  }
+
+  async function poll(){
+    try{
+      const r = await fetch("/api/state", {cache:"no-store"});
+      const j = await r.json();
+
+      // running indicator
+      const dot = document.getElementById("dot");
+      const runningText = document.getElementById("runningText");
+      if(j.running){
+        setDot(dot, "ok");
+        runningText.textContent = "Status: RUNNING";
+      } else {
+        dot.classList.remove("ok","bad");
+        runningText.textContent = "Status: STOPPED";
+      }
+      document.getElementById("invId").textContent = `ID: ${j.inventory_id || "-"}`;
+
+      // KPIs (LS removed)
+      document.getElementById("ok_reads").textContent = j.ok_reads ?? 0;
+      document.getElementById("timeouts").textContent = j.timeouts ?? 0;
+      document.getElementById("unknown_uids").textContent = j.unknown_uids ?? 0;
+
+      // last
+      document.getElementById("last_seq").textContent = j.last_seq ?? "—";
+      document.getElementById("last_uid").textContent = j.last_uid ?? "—";
+      document.getElementById("last_number").textContent = j.last_number ?? "—";
+      document.getElementById("last_reason").textContent = j.last_reason ?? "—";
+
+      const res = j.last_result ?? "—";
+      document.getElementById("last_result").textContent = (res === "A") ? "PASS (Top A)" :
+                                                         (res === "B") ? "EJECT (Top B)" : "—";
+
+      const badgeDot = document.getElementById("lastBadgeDot");
+      const badgeText = document.getElementById("lastBadgeText");
+      if(res === "A"){ setDot(badgeDot, "ok"); badgeText.textContent="PASS"; }
+      else if(res === "B"){ setDot(badgeDot, "bad"); badgeText.textContent="EJECT"; }
+      else { badgeDot.classList.remove("ok","bad"); badgeText.textContent="—"; }
+
+      // missing
+      document.getElementById("missing_count").textContent = j.missing_count ?? 0;
+      updateMissing(j.missing_preview || []);
+
+    }catch(e){}
+  }
+
+  setInterval(poll, 400);
+  poll();
+</script>
+</body>
+</html>

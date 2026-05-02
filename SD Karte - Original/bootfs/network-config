@@ -1,0 +1,15 @@
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      dhcp6: true
+      optional: true
+  wifis:
+    wlan0:
+      dhcp4: true
+      regulatory-domain: "DE"
+      access-points:
+        "Can's Lan":
+          password: "76b4d297335b4547efc5f95b7e4fa12edee1516ef21ee603aea8c4e487eae769"
+      optional: true

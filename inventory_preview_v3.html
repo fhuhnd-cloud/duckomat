@@ -298,51 +298,384 @@
         </div>
     </div>
 
-    <script src="./api.js"></script>
+    <script>
+
+        // --- Theme logic ---
+        function toggleTheme() {
+            const html = document.documentElement;
+            const newTheme = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+        }
+
+        // --- State ---
+        let isRunning = false;
+        let isPaused = false;
+        let targetReachedNotified = false;
+        let sessionScans = new Set();
+        let invName = "";
+
+        let expectedTotal = 0;
+        let cSuccess = 0;
+        let cUnmapped = 0;
+        let cDefective = 0;
+
+        const BOX_MAX = 100;
+        let fillLeft = 0;
+        let fillRight = 0;
+        let fillFront = 0;
+
+        let sortDirection = 'left'; // 'left' or 'right'
+        let fanLeftActive = false;
+        let fanRightActive = false;
+
+        let historyLog = [];
+        let mockDB = {}; // Wir füllen die DB nun dynamisch beim Test-Scannen
+
+        // --- DOM Elements ---
+        const progSuccess = document.getElementById('prog-success');
+        const progUnmapped = document.getElementById('prog-unmapped');
+        const progDefective = document.getElementById('prog-defective');
+        const progText = document.getElementById('prog-text');
+
+        const statSuccess = document.getElementById('stat-success');
+        const statUnmapped = document.getElementById('stat-unmapped');
+        const statDefective = document.getElementById('stat-defective');
+
+        const elFillLeft = document.getElementById('fill-left');
+        const elFillRight = document.getElementById('fill-right');
+        const elFillFront = document.getElementById('fill-front');
+        const btnFanLeft = document.getElementById('fan-left');
+        const btnFanRight = document.getElementById('fan-right');
+        const frontWarning = document.getElementById('front-warning');
+
+        const alertFrontBox = document.getElementById('alert-front-box');
+
+        const setupModal = document.getElementById('setup-modal');
+        const expectedInput = document.getElementById('expected-count-input');
+
+        // --- Init / Controls ---
+        function promptStartInventory() {
+            setupModal.style.display = 'flex';
+            expectedInput.focus();
+        }
+        function closeSetupModal() {
+            setupModal.style.display = 'none';
+        }
+
+        function generateInventoryName() {
+            const date = new Date();
+            const d = String(date.getDate()).padStart(2, '0');
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const y = date.getFullYear();
+            return `Inventur_${d}${m}${y}`; 
+        }
+
+        function startInventory() {
+            const val = parseInt(expectedInput.value);
+            if(isNaN(val) || val <= 0) {
+                alert("Bitte gültige Anzahl eingeben.");
+                return;
+            }
+            expectedTotal = val;
+            closeSetupModal();
+
+            isRunning = true;
+            isPaused = false;
+            targetReachedNotified = false;
+            sessionScans.clear();
+            invName = generateInventoryName();
+            document.getElementById('inv-name').innerText = invName;
+
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('btn-pause').disabled = false;
+            document.getElementById('btn-pause').innerText = "Pausieren";
+            document.getElementById('btn-stop').disabled = false;
+            document.getElementById('btn-reset').disabled = false;
+
+            if(sortDirection === 'left') { setFan('left', true); setFan('right', false); }
+            else { setFan('left', false); setFan('right', true); }
+
+            updateUI();
+        }
+
+        function togglePause() {
+            if(!isRunning) return;
+            isPaused = !isPaused;
+            const btn = document.getElementById('btn-pause');
+            if(isPaused) {
+                btn.innerText = "Fortsetzen";
+                btn.style.backgroundColor = "var(--status-warning)";
+                btn.style.color = "black";
+            } else {
+                btn.innerText = "Pausieren";
+                btn.style.backgroundColor = "var(--btn-bg)";
+                btn.style.color = "var(--text-color)";
+            }
+        }
+
+        function stopInventory() {
+            document.getElementById('stop-modal').style.display = 'flex';
+        }
+
+        function actionStop(action) {
+            document.getElementById('stop-modal').style.display = 'none';
+            if (action === 'stop') {
+                stopInventoryConfirm(false);
+            } else if (action === 'export') {
+                stopInventoryConfirm(true);
+            }
+        }
+
+        function stopInventoryConfirm(doExport) {
+            isRunning = false;
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('btn-pause').disabled = true;
+            document.getElementById('btn-stop').disabled = true;
+            setFan('left', false);
+            setFan('right', false);
+            document.getElementById('duck-status-text').innerText = "Beendet";
+            if(doExport) {
+                alert("Inventurdaten werden als CSV exportiert... (Mock)");
+            }
+        }
+
+        function actionTarget(action) {
+            document.getElementById('target-modal').style.display = 'none';
+            if (action === 'stop') {
+                stopInventoryConfirm(false);
+            } else if (action === 'export') {
+                stopInventoryConfirm(true);
+            }
+        }
+
+        function resetCounts() {
+            if(confirm("Alle Zähler dieser Inventur auf 0 setzen?")) {
+                cSuccess = 0; cUnmapped = 0; cDefective = 0;
+                fillLeft = 0; fillRight = 0; fillFront = 0;
+                historyLog = [];
+                sessionScans.clear();
+                targetReachedNotified = false;
+                updateUI();
+                document.getElementById('duck-icon').style.opacity = '0.3';
+                document.getElementById('duck-text').textContent = "?";
+                document.getElementById('uid-box').textContent = "WARTEN...";
+                document.getElementById('duck-status-text').innerText = "Zurückgesetzt";
+            }
+        }
+
+        // --- Box & Fan Logic ---
+        function toggleFan(side) {
+            if(side === 'left') setFan('left', !fanLeftActive);
+            if(side === 'right') setFan('right', !fanRightActive);
+        }
+        function setFan(side, state) {
+            if(side === 'left') {
+                fanLeftActive = state;
+                btnFanLeft.className = state ? "btn-fan active" : "btn-fan";
+                btnFanLeft.innerText = state ? "Föhn EIN" : "Föhn AUS";
+            } else {
+                fanRightActive = state;
+                btnFanRight.className = state ? "btn-fan active" : "btn-fan";
+                btnFanRight.innerText = state ? "Föhn EIN" : "Föhn AUS";
+            }
+        }
+
+        function switchSortDirection() {
+            sortDirection = (sortDirection === 'left') ? 'right' : 'left';
+            document.getElementById('current-sort-dir').innerText = sortDirection.toUpperCase();
+            if(sortDirection === 'left') { setFan('left', true); setFan('right', false); }
+            else { setFan('left', false); setFan('right', true); }
+        }
+
+        function resetSideBox(side) {
+            if(side === 'left') {
+                fillLeft = 0;
+            } else {
+                fillRight = 0;
+            }
+            updateUI();
+        }
+
+        function ackFrontBox() {
+            alertFrontBox.style.display = 'none';
+            fillFront = 0;
+            frontWarning.style.display = 'none';
+            updateUI();
+        }
+
+        // --- Simulation & Core Logic ---
+        function simulateScan() {
+            if(!isRunning || isPaused) return alert("Inventur läuft nicht!");
+
+            // Generiere eine eindeutige UID, um Duplikate zu vermeiden, es sei denn wir wollen sie testen
+            const rndId = Math.floor(Math.random() * 1000000);
+            const uid = "SIM" + rndId;
+            mockDB[uid] = Math.floor(Math.random() * 9999) + 1; // Automatisch erfolgreich gemappt
+
+            processDuck(uid, false);
+        }
+
+        function simulateFastFill() {
+            if(!isRunning || isPaused) return alert("Inventur läuft nicht!");
+            for(let i=0; i<25; i++) {
+                simulateScan();
+            }
+        }
+
+        function simulateDefect() {
+            if(!isRunning || isPaused) return alert("Inventur läuft nicht!");
+            processDuck("KEIN_TAG", true);
+        }
+
+        function processDuck(uid, isDefect) {
+            let status = "";
+            let duckNum = "?";
+            let color = "";
+
+            // DUPLICATE CHECK
+            if (!isDefect && sessionScans.has(uid)) {
+                fillFront++;
+                status = "Doppelt gescannt";
+                color = "var(--status-warning)";
+                duckNum = mockDB[uid] || "?";
+            } 
+            else if(isDefect) {
+                cDefective++;
+                fillFront++;
+                status = "Defekt/Kein Tag";
+                color = "var(--status-blocked)";
+            } 
+            else {
+                if(!isDefect) sessionScans.add(uid);
+
+                if(mockDB[uid]) {
+                    cSuccess++;
+                    duckNum = mockDB[uid];
+                    status = "Erfolgreich (" + duckNum + ")";
+                    color = "var(--status-free)";
+                    // Sort into side boxes
+                    if(sortDirection === 'left') {
+                        fillLeft++;
+                        if(fillLeft >= BOX_MAX) {
+                            switchSortDirection();
+                        }
+                    } else {
+                        fillRight++;
+                        if(fillRight >= BOX_MAX) {
+                            switchSortDirection();
+                        }
+                    }
+                } else {
+                    cUnmapped++;
+                    fillFront++;
+                    status = "Unbekannt";
+                    color = "var(--status-warning)";
+                }
+            }
+
+            // Check target reached
+            const total = cSuccess + cUnmapped + cDefective;
+            if (expectedTotal > 0 && total >= expectedTotal && !targetReachedNotified) {
+                targetReachedNotified = true;
+                document.getElementById('target-modal').style.display = 'flex';
+            }
+
+            // Check Front Box (Defects, Unmapped & Duplicates)
+            if(fillFront === 98 || fillFront === 99) {
+                frontWarning.style.display = 'block';
+            } else if (fillFront >= BOX_MAX) {
+                alertFrontBox.style.display = 'flex';
+            } else {
+                frontWarning.style.display = 'none';
+            }
+
+            updateLastScanned(uid, duckNum, status, color);
+            addHistory(uid, status, color);
+            updateUI();
+        }
+
+        function updateLastScanned(uid, num, status, color) {
+            document.getElementById('duck-icon').style.opacity = '1';
+            document.getElementById('duck-text').textContent = num;
+            const ubox = document.getElementById('uid-box');
+            ubox.textContent = uid;
+            ubox.style.borderColor = color;
+            ubox.style.color = color;
+
+            const stext = document.getElementById('duck-status-text');
+            stext.innerText = status;
+            stext.style.color = color;
+        }
+
+        function addHistory(uid, status, color) {
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+            historyLog.unshift({time, uid, status, color});
+            if(historyLog.length > 5) historyLog.pop();
+
+            const tbody = document.getElementById('history-table-body');
+            tbody.innerHTML = '';
+            historyLog.forEach(entry => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${entry.time}</td>
+                    <td>${entry.uid}</td>
+                    <td style="color: ${entry.color}; font-weight: bold;">${entry.status.split(' ')[0]}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateUI() {
+            // Stats
+            statSuccess.innerText = cSuccess;
+            statUnmapped.innerText = cUnmapped;
+            statDefective.innerText = cDefective;
+
+            // Progress Bar
+            const totalScanned = cSuccess + cUnmapped + cDefective;
+            let pSuc = 0, pUnm = 0, pDef = 0, pTotal = 0;
+
+            if(expectedTotal > 0) {
+                pSuc = (cSuccess / expectedTotal) * 100;
+                pUnm = (cUnmapped / expectedTotal) * 100;
+                pDef = (cDefective / expectedTotal) * 100;
+                pTotal = ((totalScanned) / expectedTotal) * 100;
+                if(pTotal > 100) pTotal = 100; // Cap visual at 100%
+            }
+
+            progSuccess.style.width = pSuc + '%';
+            progUnmapped.style.width = pUnm + '%';
+            progDefective.style.width = pDef + '%';
+            progText.innerText = `${totalScanned} / ${expectedTotal} (${Math.round(pTotal)}%)`;
+
+            // Boxes
+            elFillLeft.innerText = `${fillLeft}/${BOX_MAX}`;
+            elFillLeft.className = fillLeft >= BOX_MAX ? "box-fill full" : "box-fill";
+            document.getElementById('btn-reset-left').style.display = fillLeft >= BOX_MAX ? "inline-block" : "none";
+
+            elFillRight.innerText = `${fillRight}/${BOX_MAX}`;
+            elFillRight.className = fillRight >= BOX_MAX ? "box-fill full" : "box-fill";
+            document.getElementById('btn-reset-right').style.display = fillRight >= BOX_MAX ? "inline-block" : "none";
+
+            elFillFront.innerText = `${fillFront}/${BOX_MAX}`;
+            elFillFront.className = fillFront >= BOX_MAX ? "box-fill full" : "box-fill";
+        }
+
+    </script>
+<script src="./api.js"></script>
 <script>
 let isRunning = false; let isPaused = false; let expectedTotal = 0; let currentSortDir = 'left';
 const progSuccess = document.getElementById('prog-success'); const progUnmapped = document.getElementById('prog-unmapped'); const progDefective = document.getElementById('prog-defective'); const progText = document.getElementById('prog-text');
 const statSuccess = document.getElementById('stat-success'); const statUnmapped = document.getElementById('stat-unmapped'); const statDefective = document.getElementById('stat-defective');
-const btnFanLeft = document.getElementById('fan-left'); const btnFanRight = document.getElementById('fan-right');
-const historyTableBody = document.getElementById('history-table-body'); const setupModal = document.getElementById('setup-modal'); const expectedInput = document.getElementById('expected-count-input');
+const btnFanLeft = document.getElementById('fan-left'); const btnFanRight = document.getElementById('fan-right'); const historyTableBody = document.getElementById('history-table-body'); const setupModal = document.getElementById('setup-modal'); const expectedInput = document.getElementById('expected-count-input');
 function setFanVisual(el, active){ el.className = active ? 'btn-fan active' : 'btn-fan'; el.innerText = active ? 'Föhn EIN' : 'Föhn AUS'; }
-async function syncStatus() {
-  try {
-    const summary = await apiGet('/api/inventory/summary'); const hw = await apiGet('/api/hardware/status');
-    isRunning = summary.runtime_mode === 'INVENTORY_RUNNING' || summary.runtime_mode === 'INVENTORY_PAUSED'; isPaused = summary.runtime_mode === 'INVENTORY_PAUSED';
-    currentSortDir = summary.direction || 'left'; document.getElementById('current-sort-dir').innerText = currentSortDir.toUpperCase();
-    document.getElementById('btn-start').disabled = isRunning; document.getElementById('btn-pause').disabled = !isRunning; document.getElementById('btn-pause').innerText = isPaused ? 'Fortsetzen' : 'Pausieren'; document.getElementById('btn-stop').disabled = !isRunning;
-    document.getElementById('inv-name').innerText = summary.session && summary.session.id ? ('Inventur Session #' + summary.session.id) : 'Inventur-Fortschritt';
-    const counts = summary.counts || {}; const mapped = counts.mapped || 0; const unmapped = (counts.unmapped || 0) + (counts.duplicate || 0); const defective = counts.defective || 0; const total = counts.total || 0; const expected = counts.expected_total || expectedTotal || 0;
-    statSuccess.innerText = mapped; statUnmapped.innerText = unmapped; statDefective.innerText = defective;
-    const p1 = expected ? Math.min(100, (mapped/expected)*100) : 0; const p2 = expected ? Math.min(100, (unmapped/expected)*100) : 0; const p3 = expected ? Math.min(100, (defective/expected)*100) : 0;
-    progSuccess.style.width = p1 + '%'; progUnmapped.style.width = p2 + '%'; progDefective.style.width = p3 + '%'; progText.innerText = total + ' / ' + expected + ' (' + (expected ? Math.round((total/expected)*100) : 0) + '%)';
-    (summary.boxes || []).forEach(b => {
-      if (b.box_name === 'left') { document.getElementById('fill-left').innerText = b.count + '/' + b.capacity; document.getElementById('btn-reset-left').style.display = b.state === 'full' ? 'block' : 'none'; }
-      if (b.box_name === 'right') { document.getElementById('fill-right').innerText = b.count + '/' + b.capacity; document.getElementById('btn-reset-right').style.display = b.state === 'full' ? 'block' : 'none'; }
-      if (b.box_name === 'front') { document.getElementById('fill-front').innerText = b.count + '/' + b.capacity; document.getElementById('front-warning').style.display = b.state === 'full' ? 'block' : 'none'; document.getElementById('alert-front-box').style.display = b.state === 'full' ? 'flex' : 'none'; }
-    });
-    historyTableBody.innerHTML = ''; (summary.recent_scans || []).slice(0,5).forEach(s => {
-      const tr = document.createElement('tr'); tr.innerHTML = `<td>${new Date(s.timestamp).toLocaleTimeString('de-DE')}</td><td>${s.uid}</td><td style="font-weight:bold; color:${s.result==='mapped'?'var(--status-free)':'var(--status-blocked)'}">${s.result}</td>`; historyTableBody.appendChild(tr);
-    });
-    const last = (summary.recent_scans || [])[0];
-    if (last) {
-      document.getElementById('duck-icon').style.opacity = '1'; document.getElementById('uid-box').textContent = last.uid; document.getElementById('duck-text').textContent = last.duck_number || '?'; document.getElementById('duck-status-text').innerText = last.result;
-      const color = last.result === 'mapped' ? 'var(--status-free)' : (last.result === 'duplicate' ? 'var(--status-warning)' : 'var(--status-blocked)');
-      document.getElementById('uid-box').style.borderColor = color; document.getElementById('uid-box').style.color = color;
-    }
-    const actuators = hw.actuators || {}; setFanVisual(btnFanLeft, !!(actuators.fan_left && actuators.fan_left.state === 1)); setFanVisual(btnFanRight, !!(actuators.fan_right && actuators.fan_right.state === 1));
-  } catch(e) { console.error('Status Sync Fehler:', e); }
-}
+async function syncStatus() { try { const summary = await apiGet('/api/inventory/summary'); const hw = await apiGet('/api/hardware/status'); isRunning = summary.runtime_mode === 'INVENTORY_RUNNING' || summary.runtime_mode === 'INVENTORY_PAUSED'; isPaused = summary.runtime_mode === 'INVENTORY_PAUSED'; currentSortDir = summary.direction || 'left'; document.getElementById('current-sort-dir').innerText = currentSortDir.toUpperCase(); document.getElementById('btn-start').disabled = isRunning; document.getElementById('btn-pause').disabled = !isRunning; document.getElementById('btn-pause').innerText = isPaused ? 'Fortsetzen' : 'Pausieren'; document.getElementById('btn-stop').disabled = !isRunning; document.getElementById('inv-name').innerText = summary.session && summary.session.id ? ('Inventur Session #' + summary.session.id) : 'Inventur-Fortschritt'; const counts = summary.counts || {}; const mapped = counts.mapped || 0; const unmapped = (counts.unmapped || 0) + (counts.duplicate || 0); const defective = counts.defective || 0; const total = counts.total || 0; const expected = counts.expected_total || expectedTotal || 0; statSuccess.innerText = mapped; statUnmapped.innerText = unmapped; statDefective.innerText = defective; const p1 = expected ? Math.min(100, (mapped/expected)*100) : 0; const p2 = expected ? Math.min(100, (unmapped/expected)*100) : 0; const p3 = expected ? Math.min(100, (defective/expected)*100) : 0; progSuccess.style.width = p1 + '%'; progUnmapped.style.width = p2 + '%'; progDefective.style.width = p3 + '%'; progText.innerText = total + ' / ' + expected + ' (' + (expected ? Math.round((total/expected)*100) : 0) + '%)'; (summary.boxes || []).forEach(b => { if (b.box_name === 'left') { document.getElementById('fill-left').innerText = b.count + '/' + b.capacity; document.getElementById('btn-reset-left').style.display = b.state === 'full' ? 'block' : 'none'; } if (b.box_name === 'right') { document.getElementById('fill-right').innerText = b.count + '/' + b.capacity; document.getElementById('btn-reset-right').style.display = b.state === 'full' ? 'block' : 'none'; } if (b.box_name === 'front') { document.getElementById('fill-front').innerText = b.count + '/' + b.capacity; document.getElementById('front-warning').style.display = b.state === 'full' ? 'block' : 'none'; document.getElementById('alert-front-box').style.display = b.state === 'full' ? 'flex' : 'none'; } }); historyTableBody.innerHTML = ''; (summary.recent_scans || []).slice(0,5).forEach(s => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${new Date(s.timestamp).toLocaleTimeString('de-DE')}</td><td>${s.uid}</td><td style="font-weight:bold; color:${s.result==='mapped'?'var(--status-free)':'var(--status-blocked)'}">${s.result}</td>`; historyTableBody.appendChild(tr); }); const last = (summary.recent_scans || [])[0]; if (last) { document.getElementById('duck-icon').style.opacity = '1'; document.getElementById('uid-box').textContent = last.uid; document.getElementById('duck-text').textContent = last.duck_number || '?'; document.getElementById('duck-status-text').innerText = last.result; const color = last.result === 'mapped' ? 'var(--status-free)' : (last.result === 'duplicate' ? 'var(--status-warning)' : 'var(--status-blocked)'); document.getElementById('uid-box').style.borderColor = color; document.getElementById('uid-box').style.color = color; } const actuators = hw.actuators || {}; setFanVisual(btnFanLeft, !!(actuators.fan_left && actuators.fan_left.state === 1)); setFanVisual(btnFanRight, !!(actuators.fan_right && actuators.fan_right.state === 1)); } catch(e) { console.error('Status Sync Fehler:', e); } }
 async function startInventory() { const val = parseInt(expectedInput.value); if(isNaN(val) || val <= 0) { alert('Bitte gültige Anzahl eingeben.'); return; } expectedTotal = val; closeSetupModal(); await apiPost('/api/inventory/start', {expected_total: val}); await syncStatus(); }
 function openSetupModal(){ setupModal.style.display = 'flex'; } function closeSetupModal(){ setupModal.style.display = 'none'; } function stopInventory(){ document.getElementById('stop-modal').style.display = 'flex'; }
 async function actionStop(action){ document.getElementById('stop-modal').style.display = 'none'; const res = await apiPost('/api/inventory/stop'); if (action === 'export' && res.session_id) { const link = document.createElement('a'); link.href = API_BASE + '/api/inventory/export.csv?session_id=' + res.session_id; document.body.appendChild(link); link.click(); document.body.removeChild(link); } await syncStatus(); }
 function actionTarget(action){ document.getElementById('target-modal').style.display = 'none'; if(action === 'export') actionStop('export'); else actionStop('stop'); }
 async function togglePause(){ if(isPaused) await apiPost('/api/inventory/resume'); else await apiPost('/api/inventory/pause'); await syncStatus(); }
-async function toggleFan(side){ const hw = await apiGet('/api/hardware/status'); const actuators = hw.actuators || {};
-  if(side === 'left'){ const on = !!(actuators.fan_left && actuators.fan_left.state === 1); await apiPost('/api/hardware/relay', {name:'fan_left', state:on?0:1}); }
-  if(side === 'right'){ const on = !!(actuators.fan_right && actuators.fan_right.state === 1); await apiPost('/api/hardware/relay', {name:'fan_right', state:on?0:1}); } await syncStatus();
-}
+async function toggleFan(side){ const hw = await apiGet('/api/hardware/status'); const actuators = hw.actuators || {}; if(side === 'left'){ const on = !!(actuators.fan_left && actuators.fan_left.state === 1); await apiPost('/api/hardware/relay', {name:'fan_left', state:on?0:1}); } if(side === 'right'){ const on = !!(actuators.fan_right && actuators.fan_right.state === 1); await apiPost('/api/hardware/relay', {name:'fan_right', state:on?0:1}); } await syncStatus(); }
 async function switchSortDirection(){ currentSortDir = currentSortDir === 'left' ? 'right' : 'left'; await apiPost('/api/inventory/direction', {direction: currentSortDir}); await syncStatus(); }
 async function resetSideBox(side){ await apiPost('/api/inventory/box/reset', {box: side}); await syncStatus(); }
 async function ackFrontBox(){ await apiPost('/api/inventory/box/reset', {box: 'front'}); await syncStatus(); }
@@ -350,3 +683,4 @@ function resetCounts(){ alert('Reset nur über neues Starten der Session vorgese
 setInterval(syncStatus, 1500); syncStatus();
 </script>
 </body>
+</html>

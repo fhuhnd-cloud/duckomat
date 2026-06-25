@@ -1,0 +1,4 @@
+const API_BASE = window.API_BASE || (window.location.protocol === 'file:' ? "http://raspberrypi.local:5000" : "");
+async function apiGet(path){ const res = await fetch(API_BASE + path); if(!res.ok) throw new Error("GET " + path + " failed: " + res.status); const ct = res.headers.get("content-type") || ""; return ct.includes("application/json") ? res.json() : res.text(); }
+async function apiPost(path, body={}){ const res = await fetch(API_BASE + path, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)}); if(!res.ok) throw new Error("POST " + path + " failed: " + res.status); const ct = res.headers.get("content-type") || ""; return ct.includes("application/json") ? res.json() : res.text(); }
+function formatTs(ts){ if(!ts) return "--"; try { return new Date(ts).toLocaleTimeString("de-DE"); } catch { return ts; } }

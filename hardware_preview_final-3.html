@@ -151,14 +151,14 @@
 <span class="item-name">Lichtschranke 1</span>
 <span class="item-sub">Die vordere Lichtschranke erkennt die Ankunft einer neuen Ente und alarmiert den RFID Reader.</span>
 </div>
-<div class="status-box status-frei">Frei</div>
+<div class="status-box status-frei"> <span data-hw-ls1>Frei</span> </div>
 </div>
 <div class="item-row">
 <div class="item-info">
 <span class="item-name">Lichtschranke 2</span>
 <span class="item-sub">Die hintere Lichtschranke warnt den Klöppel vor, dass er gleich an der Reihe ist.</span>
 </div>
-<div class="status-box status-blockiert">Blockiert</div>
+<div class="status-box status-blockiert"> <span data-hw-ls2>Blockiert</span> </div>
 </div>
 <div class="item-row" id="rfid-row" onclick="simulateRFID()" style="cursor: pointer;" title="Klicken um Scan zu simulieren">
 <div class="item-info">
@@ -177,7 +177,7 @@
 <text class="duck-number" id="duck-text" x="45" y="70">1234</text>
 </svg>
 <!-- Box matching FREI/BLOCKIERT -->
-<div class="status-box status-uid" id="uid-box">--</div>
+<div class="status-box status-uid" id="uid-box"> <span data-hw-rfid>--</span> </div>
 </div>
 </div>
 </div><div class="card">
@@ -462,5 +462,118 @@ async function pollHardware(){try{const data=await apiGet('/api/hardware/status'
 async function sendCommand(cmd, body={}){try{await apiPost(cmd, body);await pollHardware();}catch(e){console.error(e);alert('API-Fehler: '+e.message);}}
 [...document.querySelectorAll('button')].forEach(btn=>{const t=(btn.textContent||'').trim();if(t==='Start')btn.onclick=()=>sendCommand('/api/hardware/belt/start');if(t==='Stopp')btn.onclick=()=>sendCommand('/api/hardware/belt/stop');if(t==='Fön 1 AN')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_left',state:1});if(t==='Fön 1 AUS')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_left',state:0});if(t==='Fön 2 AN')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_right',state:1});if(t==='Fön 2 AUS')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_right',state:0});if(t==='Not-Aus')btn.onclick=()=>sendCommand('/api/hardware/emergency-stop');});
 setInterval(pollHardware,1500);pollHardware();
-</script></body>
+</script>
+<script>
+(function(){
+  const HZ = 700;
+  const state = { lastStatus:null };
+
+  function normalizeStatus(data){
+    const sensors = data?.sensors || {};
+    const machine = data?.machine || {};
+    const rfid = data?.rfid || null;
+    const actuators = data?.actuators || {};
+    return {
+      serial_connected: !!data?.serial_connected,
+      ls1: sensors.ls1?.state,
+      ls2: sensors.ls2?.state,
+      ls1_event: sensors.ls1?.event || '--',
+      ls2_event: sensors.ls2?.event || '--',
+      rfid_uid: rfid?.uid || data?.last_uid || '--',
+      rfid_status: rfid?.status || '--',
+      belt: machine.belt_state || machine.belt || '--',
+      good: machine.good_count ?? machine.good ?? 0,
+      bad: machine.bad_count ?? machine.bad ?? 0,
+      rest_left: machine.rest_left ?? machine.left ?? null,
+      servo_state: machine.servo_state ?? '--',
+      pwm_fast: machine.pwm_fast ?? actuators.motor_fast?.value ?? 0,
+      pwm_slow: machine.pwm_slow ?? actuators.motor_slow?.value ?? 0,
+      relay1: actuators.relay1?.state ?? 0,
+      relay2: actuators.relay2?.state ?? 0,
+      led: actuators.led?.state ?? 0,
+      event: machine.event || '--'
+    };
+  }
+
+  function setText(selectors, value){
+    selectors.forEach(sel => document.querySelectorAll(sel).forEach(el => el.textContent = value));
+  }
+
+  function setBadgeLike(selectors, activeText, inactiveText, active){
+    selectors.forEach(sel => document.querySelectorAll(sel).forEach(el => {
+      el.textContent = active ? activeText : inactiveText;
+      el.dataset.state = active ? 'active' : 'inactive';
+    }));
+  }
+
+  async function refreshHardwareStatus(){
+    try {
+      const res = await fetch((window.API_BASE||'') + '/api/hardware/status');
+      const data = await res.json();
+      state.lastStatus = normalizeStatus(data);
+      const s = state.lastStatus;
+      setBadgeLike(['[data-hw-ls1]'], 'Blockiert', 'Frei', Number(s.ls1) === 0);
+      setBadgeLike(['[data-hw-ls2]'], 'Blockiert', 'Frei', Number(s.ls2) === 0);
+      setText(['[data-hw-rfid]'], s.rfid_uid || '--');
+      setText(['[data-hw-rfid-status]'], s.rfid_status || '--');
+      setText(['[data-hw-belt-state]'], s.belt || '--');
+      setText(['[data-hw-good]'], String(s.good));
+      setText(['[data-hw-bad]'], String(s.bad));
+      setText(['[data-hw-event]'], s.event || '--');
+      setText(['[data-hw-servo-state]'], String(s.servo_state));
+      setText(['[data-hw-motor-fast]'], String(s.pwm_fast));
+      setText(['[data-hw-motor-slow]'], String(s.pwm_slow));
+      setBadgeLike(['[data-hw-serial]'], 'Verbunden', 'Getrennt', !!s.serial_connected);
+      setBadgeLike(['[data-hw-relay1]'], 'An', 'Aus', Number(s.relay1) === 1);
+      setBadgeLike(['[data-hw-relay2]'], 'An', 'Aus', Number(s.relay2) === 1);
+      setBadgeLike(['[data-hw-led]'], 'An', 'Aus', Number(s.led) === 1);
+    } catch(e) {}
+  }
+
+  async function post(path, body={}){
+    const res = await fetch((window.API_BASE||'') + path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    return res.json();
+  }
+
+  document.addEventListener('click', async (ev) => {
+    const el = ev.target.closest('[data-hw-action]');
+    if(!el) return;
+    const action = el.getAttribute('data-hw-action');
+    if(action === 'belt-start') await post('/api/hardware/belt/start', {});
+    if(action === 'belt-stop') await post('/api/hardware/belt/stop', {});
+    if(action === 'belt-resume') await post('/api/hardware/belt/resume', {});
+    if(action === 'emergency-stop') await post('/api/hardware/emergency-stop', {});
+    if(action === 'relay1-on') await post('/api/hardware/relay', {name:'relay1', state:1});
+    if(action === 'relay1-off') await post('/api/hardware/relay', {name:'relay1', state:0});
+    if(action === 'relay2-on') await post('/api/hardware/relay', {name:'relay2', state:1});
+    if(action === 'relay2-off') await post('/api/hardware/relay', {name:'relay2', state:0});
+    if(action === 'led-on') await post('/api/hardware/relay', {name:'led', state:1});
+    if(action === 'led-off') await post('/api/hardware/relay', {name:'led', state:0});
+    if(action === 'servo-left') await post('/api/hardware/servo/rest', {side:'left'});
+    if(action === 'servo-right') await post('/api/hardware/servo/rest', {side:'right'});
+    if(action === 'servo-kick-left') await post('/api/hardware/servo/kick', {target:'left'});
+    if(action === 'servo-kick-right') await post('/api/hardware/servo/kick', {target:'right'});
+    if(action === 'ping') await post('/api/hardware/ping', {});
+    if(action === 'motor-fast') {
+      const v = Number(document.querySelector('[data-hw-input="motor-fast"]')?.value || 0);
+      await post('/api/hardware/motor', {name:'motor_fast', state: v > 0 ? 1 : 0, value:v});
+    }
+    if(action === 'motor-slow') {
+      const v = Number(document.querySelector('[data-hw-input="motor-slow"]')?.value || 0);
+      await post('/api/hardware/motor', {name:'motor_slow', state: v > 0 ? 1 : 0, value:v});
+    }
+    if(action === 'auto-sort-on') await post('/api/hardware/config', {auto_sort_enabled:true});
+    if(action === 'auto-sort-off') await post('/api/hardware/config', {auto_sort_enabled:false});
+    setTimeout(refreshHardwareStatus, 150);
+  });
+
+  window.refreshHardwareStatus = refreshHardwareStatus;
+  setInterval(refreshHardwareStatus, HZ);
+  document.addEventListener('DOMContentLoaded', refreshHardwareStatus);
+})();
+</script>
+
+</body>
 </html>
+
+<!-- hardware bindings: data-hw-ls1 data-hw-ls2 data-hw-rfid -->

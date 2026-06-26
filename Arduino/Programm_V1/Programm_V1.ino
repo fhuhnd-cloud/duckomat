@@ -1,3 +1,4 @@
+#include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_PN532.h>
 #include <ServoTimer2.h>
@@ -169,56 +170,95 @@ void cleanupQueue() {
 }
 
 // -----------------------------------------
-// 1. SERIELLE EINGABE 
+// 1. SERIELLE EINGABE (Überarbeitet für JSON vom Raspberry Pi)
 // -----------------------------------------
 void handleSerial() {
   if (Serial.available()) {
-    char c = Serial.read();
-    
-    if (c == 'n' || c == 'N') {
-      Serial.println(F("\n[!!! NOTAUS !!!] Anlage wird hart gestoppt!"));
-      stopBelts();
-      for(int i=0; i<MAX_DUCKS; i++) { queue[i].active = false; }
-      myServo.detach();
-      servoState = 0;
-      badDucksCount = 0;
-      goodDucksCount = 0;
-    }
-    else if (c == 'b' || c == 'B') {
-      if (currentBeltState != STOPPED) {
-        Serial.println(F("\n[INFO] Bänder wurden MANUELL GESTOPPT."));
+    // Liest die eingehende Zeile bis zum Zeilenumbruch ('\n')
+    String payload = Serial.readStringUntil('\n');
+    payload.trim(); // Entferne versehentliche Leerzeichen am Anfang und Ende
+
+    // Fall 1: Altes System (Einzelne Buchstaben für die manuelle Steuerung über Terminal)
+    if (payload.length() == 1) {
+      char c = payload[0];
+      if (c == 'n' || c == 'N') {
+        Serial.println(F("\n[!!! NOTAUS !!!] Anlage wird hart gestoppt!"));
         stopBelts();
-      } else {
-        Serial.println(F("\n[INFO] Bänder werden GESTARTET..."));
-        kompensiereTimer();
+        for(int i=0; i<MAX_DUCKS; i++) { queue[i].active = false; }
+        myServo.detach();
+        servoState = 0;
+        badDucksCount = 0;
+        goodDucksCount = 0;
+      }
+      else if (c == 'b' || c == 'B') {
+        if (currentBeltState != STOPPED) {
+          Serial.println(F("\n[INFO] Bänder wurden MANUELL GESTOPPT."));
+          stopBelts();
+        } else {
+          Serial.println(F("\n[INFO] Bänder werden GESTARTET..."));
+          kompensiereTimer();
+          startBelts();
+        }
+      }
+      else if (c == 'g' || c == 'G') {
+        Serial.println(F("\n[INFO] Sortierung wird FORTGESETZT..."));
+        if (currentBeltState == STOPPED) { kompensiereTimer(); }
+        goodDucksCount = 0;
         startBelts();
       }
-    }
-    else if (c == 'g' || c == 'G') {
-      Serial.println(F("\n[INFO] Sortierung wird FORTGESETZT..."));
-      if (currentBeltState == STOPPED) {
-        kompensiereTimer();
-      }
-      goodDucksCount = 0;
-      startBelts();
-    }
-  }
-}
+    } 
+    // Fall 2: Neues System (JSON-Befehle vom Raspberry Pi Frontend)
+    else if (payload.startsWith("{")) {
+      StaticJsonDocument<256> doc;
+      DeserializationError error = deserializeJson(doc, payload);
 
-void kompensiereTimer() {
-  if (pauseStartTime > 0) {
-    unsigned long pausedDuration = millis() - pauseStartTime;
-    for(int i=0; i<MAX_DUCKS; i++) {
-      // Wenn sie schon an LS2 vorbei war, den Servo-Timer kompensieren
-      if(queue[i].active && queue[i].ls2Triggered) {
-        queue[i].ls2Time += pausedDuration; 
-      }
-      // NEU: Wenn sie ZWISCHEN LS1 und LS2 stand, die Startzeit kompensieren!
-      if(queue[i].active && !queue[i].ls2Triggered) {
-        queue[i].ls1Time += pausedDuration;
+      if (!error) {
+        String type = doc["type"];
+        
+        // --- AKTUATOREN (Motoren & Bänder) ---
+        if (type == "actuator") {
+          String name = doc["name"];
+          int state = doc["state"];
+          
+          // Wenn das Kommando für einen der beiden Bänder-Motoren ist
+          if (name == "motor_main" || name == "motor_feed") {
+            // State 1 = START
+            if (state == 1 && currentBeltState == STOPPED) {
+              kompensiereTimer();
+              startBelts(); 
+              Serial.println(F("[JSON] Bänder GESTARTET über Frontend"));
+            } 
+            // State 0 = STOPP
+            else if (state == 0 && currentBeltState != STOPPED) {
+              stopBelts();  
+              Serial.println(F("[JSON] Bänder GESTOPPT über Frontend"));
+            }
+          }
+        }
+        
+        // --- EMERGENCY STOP (Not-Aus) ---
+        else if (type == "emergency_stop") {
+          stopBelts();
+          for(int i=0; i<MAX_DUCKS; i++) { queue[i].active = false; }
+          myServo.detach();
+          servoState = 0;
+          Serial.println(F("[JSON] NOT-AUS empfangen über Frontend!"));
+        }
+
+        // --- SET MODE (Optional: Inventurmodus etc.) ---
+        else if (type == "set_mode") {
+            String mode = doc["mode"];
+            Serial.print(F("[JSON] Modus gewechselt zu: "));
+            Serial.println(mode);
+            // Hier könntest du später Code einfügen, wenn der Arduino
+            // im Inventur-Modus anders reagieren soll als im Mapping-Modus.
+        }
+
+      } else {
+        Serial.print(F("[JSON-FEHLER] Konnte Befehl vom Pi nicht lesen: "));
+        Serial.println(error.c_str());
       }
     }
-    pauseStartTime = 0;
   }
 }
 

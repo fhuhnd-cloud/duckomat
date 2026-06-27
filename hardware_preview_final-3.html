@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-
 <html data-theme="dark" lang="de">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Duck-O-Mat Hardware</title>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Duck-O-Mat Hardware</title>
 <style>
         :root {
             --bg-color: #121212;
@@ -94,38 +93,119 @@
             border-radius: 15px; padding: 15px; display: flex; flex-direction: column; gap: 10px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.1);
         }
-        .servo-desc { font-size: 0.9rem; color: #888; margin-bottom: 5px; line-height: 1.4; }
-        .pendulum-container {
-            display: flex; align-items: center; justify-content: center; gap: 15px;
-            margin: 5px 0; padding: 5px; background-color: var(--btn-bg);
-            border-radius: 10px; border: 1px solid var(--border-color);
-        }
-        .pendulum-svg-container {
-            position: relative; width: 120px; height: 64px; transform: scale(0.85); transform-origin: center;
-            overflow: visible; display: flex; justify-content: center;
-        }
-        #pendulum-arm {
-            transform-origin: 0px 10px; /* FIX ORIGIN */
-        }
-        .degree-input-wrapper {
-            display: flex; align-items: center; background: var(--header-bg);
-            border: 2px solid var(--border-color); border-radius: 10px; padding: 5px 10px;
-        }
-        #servo-degree {
-            font-size: 1.3rem; font-weight: bold; color: var(--accent-color);
-            background: transparent; border: none; width: 45px;
-            text-align: right; outline: none; font-family: inherit; -moz-appearance: textfield;
-        }
-        #servo-degree::-webkit-outer-spin-button, #servo-degree::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .degree-symbol { font-size: 1.3rem; font-weight: bold; color: var(--accent-color); }
-        .servo-buttons-container { display: flex; flex-direction: column; gap: 10px; }
-        .servo-btn-row { display: flex; gap: 10px; justify-content: center; width: 100%; }
-        .servo-btn {
-            background-color: var(--header-bg); border: 1px solid var(--border-color);
-            color: var(--text-color); padding: 6px 8px; border-radius: 8px;
-            cursor: pointer; font-size: 0.8rem; transition: all 0.2s; flex: 1; text-align: center;
-        }
-        .servo-btn:hover { background-color: var(--btn-hover); border-color: var(--accent-color); transform: translateY(-2px); }
+        .servo-desc {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 5px;
+  line-height: 1.4;
+}
+
+.pendulum-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 5px 0;
+  padding: 10px 12px;
+  background-color: var(--btn-bg);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.pendulum-svg-container {
+  position: relative;
+  width: 180px;
+  height: 110px;
+  overflow: visible;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#pendulum-arm {
+  transition: transform 0.12s linear;
+}
+
+#arc-progress {
+  transition: stroke-dashoffset 0.12s linear;
+}
+
+.degree-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: var(--header-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  padding: 5px 10px;
+}
+
+#servo-degree {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: var(--accent-color);
+  background: transparent;
+  border: none;
+  width: 56px;
+  text-align: right;
+  outline: none;
+  font-family: inherit;
+  -moz-appearance: textfield;
+}
+
+#servo-degree::-webkit-outer-spin-button,
+#servo-degree::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.degree-symbol {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: var(--accent-color);
+  margin-left: 4px;
+}
+
+.servo-buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.servo-btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.servo-btn {
+  background-color: var(--header-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  flex: 1;
+  text-align: center;
+  min-width: 90px;
+}
+
+.servo-btn:hover {
+  background-color: var(--btn-hover);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+}
+
+.servo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
 </style>
 </head>
 <body>
@@ -144,436 +224,635 @@
 </button>
 </div>
 </div>
-<div class="main-content"><div class="column"><div class="card">
-<div class="card-title">Sensorik</div>
-<div class="item-row">
-<div class="item-info">
-<span class="item-name">Lichtschranke 1</span>
-<span class="item-sub">Die vordere Lichtschranke erkennt die Ankunft einer neuen Ente und alarmiert den RFID Reader.</span>
-</div>
-<div class="status-box status-frei"> <span data-hw-ls1>Frei</span> </div>
-</div>
-<div class="item-row">
-<div class="item-info">
-<span class="item-name">Lichtschranke 2</span>
-<span class="item-sub">Die hintere Lichtschranke warnt den Klöppel vor, dass er gleich an der Reihe ist.</span>
-</div>
-<div class="status-box status-blockiert"> <span data-hw-ls2>Blockiert</span> </div>
-</div>
-<div class="item-row" id="rfid-row" onclick="simulateRFID()" style="cursor: pointer;" title="Klicken um Scan zu simulieren">
-<div class="item-info">
-<span class="item-name" style="font-size: 1.2rem;">RFID Reader</span>
-<span class="item-sub">Der RFID Reader liest die individuellen Tags unter den Enten aus.</span>
-</div>
-<div class="rfid-container">
-<!-- Duck is between the text and the UID box -->
-<svg class="duck-svg" id="duck-icon" style="opacity: 0;" viewbox="0 0 100 100">
-<!-- Improved larger duck -->
-<path d="M 65 15 C 85 15, 90 35, 85 45 L 85 45 C 95 45, 95 55, 85 55 L 80 55 C 80 60, 85 90, 50 95 C 15 100, 5 75, 10 50 C 15 40, 25 35, 35 45 C 40 30, 50 15, 65 15 Z" fill="var(--duck-color)"></path>
-<circle cx="72" cy="28" fill="#000" r="4"></circle>
-<!-- Beak -->
-<path d="M 82 38 Q 100 38 100 45 Q 100 52 82 52 Z" fill="#ff9900"></path>
-<!-- 4 Digit Number -->
-<text class="duck-number" id="duck-text" x="45" y="70">1234</text>
-</svg>
-<!-- Box matching FREI/BLOCKIERT -->
-<div class="status-box status-uid" id="uid-box"> <span data-hw-rfid>--</span> </div>
-</div>
-</div>
-</div><div class="card">
-<div class="card-title">Förderbänder</div>
-<div class="item-row">
-<div class="item-info">
-<span class="item-name">Motor 1</span>
-<span class="item-sub">Das kurze Vorband staut die ENten und übergibt sie an das Hauptband.</span>
-</div>
-<div class="motor-controls">
-<input class="slider" max="100" min="0" oninput="updateSpeed('speed1', this.value)" type="range" value="50"/>
-<span class="motor-speed" id="speed1">50%</span>
-</div>
-</div>
-<div class="item-row">
-<div class="item-info">
-<span class="item-name">Motor 2</span>
-<span class="item-sub">Das Hauptband läuft schneller als das Vorband und generiert so die nötigen Abstände zwischen den Enten.</span>
-</div>
-<div class="motor-controls">
-<input class="slider" max="100" min="0" oninput="updateSpeed('speed2', this.value)" type="range" value="75"/>
-<span class="motor-speed" id="speed2">75%</span>
-</div>
-</div>
-</div></div><div class="column"><div class="kloeppel-card card">
-<div class="card-title">Klöppel</div>
-<div class="item-name">Servo-Motor</div>
-<div class="servo-desc">Der Servo-Motor kann keine vollen Umdrehungen ausführen, lässt sich aber über die Pulsweitenmodulation positionsgenau ansteuern.</div>
-<div class="pendulum-container">
-<div class="pendulum-svg-container">
-<svg height="80" id="pendulum-svg" viewbox="-75 -10 150 80" width="150">
-<path d="M -60 10 A 60 60 0 0 0 60 10" fill="none" stroke="var(--border-color)" stroke-linecap="round" stroke-width="8"></path>
-<path d="M -60 10 A 60 60 0 0 0 60 10" fill="none" id="arc-progress" stroke="var(--accent-color)" stroke-dasharray="188.5" stroke-dashoffset="188.5" stroke-linecap="round" stroke-width="8"></path>
-<circle cx="0" cy="10" fill="var(--text-color)" r="6"></circle>
+
+  <div class="main-content">
+    <div class="column">
+      <div class="card">
+        <div class="card-title">Sensorik</div>
+
+        <div class="item-row">
+          <div class="item-info">
+            <span class="item-name">Lichtschranke 1</span>
+            <span class="item-sub">Die vordere Lichtschranke erkennt die Ankunft einer neuen Ente und alarmiert den RFID Reader.</span>
+          </div>
+          <div class="status-box status-frei">
+            <span data-hw-ls1>Frei</span>
+          </div>
+        </div>
+
+        <div class="item-row">
+          <div class="item-info">
+            <span class="item-name">Lichtschranke 2</span>
+            <span class="item-sub">Die hintere Lichtschranke warnt den Klöppel vor, dass er gleich an der Reihe ist.</span>
+          </div>
+          <div class="status-box status-blockiert">
+            <span data-hw-ls2>Blockiert</span>
+          </div>
+        </div>
+
+        <div class="item-row" id="rfid-row">
+          <div class="item-info">
+            <span class="item-name" style="font-size: 1.2rem;">RFID Reader</span>
+            <span class="item-sub">Der RFID Reader liest die individuellen Tags unter den Enten aus.</span>
+          </div>
+
+          <div class="rfid-container">
+            <svg class="duck-svg" id="duck-icon" style="opacity: 0;" viewBox="0 0 100 100">
+              <path d="M 65 15 C 85 15, 90 35, 85 45 L 85 45 C 95 45, 95 55, 85 55 L 80 55 C 80 60, 85 90, 50 95 C 15 100, 5 75, 10 50 C 15 40, 25 35, 35 45 C 40 30, 50 15, 65 15 Z" fill="var(--duck-color)"></path>
+              <circle cx="72" cy="28" r="4" fill="#000"></circle>
+              <path d="M 82 38 Q 100 38 100 45 Q 100 52 82 52 Z" fill="#ff9900"></path>
+              <text class="duck-number" id="duck-text" x="45" y="70">0000</text>
+            </svg>
+
+            <div class="status-box status-uid" id="uid-box">
+              <span data-hw-rfid>--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer-state" id="serial-state">Verbindung wird geprüft ...</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Förderbänder</div>
+
+        <div class="item-row">
+          <div class="item-info">
+            <span class="item-name">Motor 1</span>
+            <span class="item-sub">Das kurze Vorband staut die Enten und übergibt sie an das Hauptband.</span>
+          </div>
+          <div class="motor-controls">
+            <input class="slider" id="motor1-slider" type="range" min="0" max="100" value="0">
+            <span class="motor-speed" id="speed1">0%</span>
+          </div>
+        </div>
+
+        <div class="item-row">
+          <div class="item-info">
+            <span class="item-name">Motor 2</span>
+            <span class="item-sub">Das Hauptband läuft schneller als das Vorband und generiert so die nötigen Abstände zwischen den Enten.</span>
+          </div>
+          <div class="motor-controls">
+            <input class="slider" id="motor2-slider" type="range" min="0" max="100" value="0">
+            <span class="motor-speed" id="speed2">0%</span>
+          </div>
+        </div>
+
+        <div class="button-grid">
+          <button class="action-btn" id="belt-start-btn">Start</button>
+          <button class="action-btn" id="belt-stop-btn">Stopp</button>
+          <button class="action-btn" id="belt-resume-btn">Resume</button>
+          <button class="action-btn danger" id="emergency-btn">Not-Aus</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="column">
+  <div class="kloeppel-card card">
+    <div class="card-title">Klöppel</div>
+
+    <div class="item-name">Servo-Motor</div>
+    <div class="servo-desc">
+      Der Servo-Motor kann keine vollen Umdrehungen ausführen, lässt sich aber über die Pulsweitenmodulation positionsgenau ansteuern.
+    </div>
+
+    <div class="pendulum-container">
+      <div class="pendulum-svg-container">
+        <svg id="pendulum-svg" width="180" height="110" viewBox="-90 0 180 110">
+  <path
+    d="M -42.43 52.43 A 60 60 0 0 0 42.43 52.43"
+    fill="none"
+    stroke="var(--border-color)"
+    stroke-width="8"
+    stroke-linecap="round"></path>
+
+  <path
+    id="arc-progress"
+    d="M -42.43 52.43 A 60 60 0 0 0 42.43 52.43"
+    fill="none"
+    stroke="var(--accent-color)"
+    stroke-width="8"
+    stroke-linecap="round"
+    stroke-dasharray="94.25"
+    stroke-dashoffset="47.125"></path>
+
+<circle cx="0" cy="10" r="6" fill="var(--text-color)"></circle>
+
 <g id="pendulum-arm" transform="rotate(0 0 10)">
-<line stroke="var(--text-color)" stroke-width="4" x1="0" x2="0" y1="10" y2="70"></line>
-<circle cx="0" cy="70" fill="var(--status-blocked)" r="10"></circle>
+  <line x1="0" y1="10" x2="0" y2="70" stroke="var(--text-color)" stroke-width="4"></line>
+  <circle cx="0" cy="70" r="10" fill="var(--status-blocked)"></circle>
 </g>
-<path d="M -70 10 A 70 70 0 0 0 70 10" fill="transparent" id="pendulum-hitbox" stroke="transparent" stroke-width="40" style="cursor: grab;"></path>
+
+  <path
+    id="pendulum-hitbox"
+    d="M -55 55 A 65 65 0 0 0 55 55"
+    fill="transparent"
+    stroke="transparent"
+    stroke-width="36"
+    style="cursor: grab;"></path>
 </svg>
-</div>
-<div class="degree-input-wrapper">
-<input id="servo-degree" max="180" min="0" type="number" value="90"/>
-<span class="degree-symbol">°</span>
-</div>
-</div>
-<div class="servo-buttons-container">
-<div class="servo-btn-row">
-<button class="servo-btn" onclick="setServoDegree(0)">Max Links (0°)</button>
-<button class="servo-btn" onclick="setServoDegree(45)">Pass Links (45°)</button>
-<button class="servo-btn" onclick="setServoDegree(90)">Mitte (90°)</button>
-<button class="servo-btn" onclick="setServoDegree(135)">Pass Rechts (135°)</button>
-<button class="servo-btn" onclick="setServoDegree(180)">Max Rechts (180°)</button>
-</div>
-<div class="servo-btn-row">
-<button class="servo-btn" id="kick-left-btn" onclick="triggerKick('left')" style="max-width: 50%;">Kick Links</button>
-<button class="servo-btn" id="kick-right-btn" onclick="triggerKick('right')" style="max-width: 50%;">Kick Rechts</button>
-</div>
-</div>
-</div><div class="card">
-<div class="card-title">Gebläse</div>
-<div class="item-row">
-<div class="item-info">
-<span class="item-name">Fön 1</span>
-</div>
-<label class="toggle-switch">
-<input type="checkbox"/>
-<span class="slider-round"></span>
-</label>
-</div>
-<div class="item-row">
-<div class="item-info">
-<span class="item-name">Fön 2</span>
-</div>
-<label class="toggle-switch">
-<input checked="" type="checkbox"/>
-<span class="slider-round"></span>
-</label>
-</div>
-</div></div></div>
-<script>
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            html.setAttribute('data-theme', newTheme);
+      </div>
 
-            const themeIcon = document.getElementById('theme-icon');
-            if (newTheme === 'light') {
-                themeIcon.innerHTML = '<path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06z"/>';
-            } else {
-                themeIcon.innerHTML = '<path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>';
-            }
-        }
+      <div class="degree-input-wrapper">
+        <input id="servo-degree" type="number" min="45" max="135" value="90">
+        <span class="degree-symbol">°</span>
+      </div>
+    </div>
 
-        function updateSpeed(id, val) {
-            document.getElementById(id).innerText = val + '%';
-        }
+    <div class="servo-buttons-container">
+      <div class="servo-btn-row">
+        <button class="servo-btn" data-degree="45">Links</button>
+        <button class="servo-btn" data-degree="90">Mitte</button>
+        <button class="servo-btn" data-degree="135">Rechts</button>
+      </div>
 
-        let duckVisible = false;
-        function simulateRFID() {
-            const duck = document.getElementById('duck-icon');
-            const text = document.getElementById('duck-text');
-            const uidBox = document.getElementById('uid-box');
+      <div class="servo-btn-row">
+        <button class="servo-btn" id="kick-left-btn">Kick Links</button>
+        <button class="servo-btn" id="kick-right-btn">Kick Rechts</button>
+      </div>
+    </div>
+  </div>
 
-            duckVisible = !duckVisible;
-            if(duckVisible) {
-                duck.style.opacity = '1';
-                // Random 4 digit number
-                const num = Math.floor(1000 + Math.random() * 9000);
-                text.textContent = num;
-                uidBox.textContent = "A4B7" + num;
-                uidBox.style.borderColor = "var(--accent-color)";
-                uidBox.style.color = "var(--accent-color)";
-            } else {
-                duck.style.opacity = '0';
-                uidBox.textContent = "--";
-                uidBox.style.borderColor = "#888";
-                uidBox.style.color = "#888";
-            }
-        }
-    
-        // Servo Logic
-        const pendulumSvg = document.getElementById('pendulum-svg');
-        const pendulumArm = document.getElementById('pendulum-arm');
-        const degreeInput = document.getElementById('servo-degree');
-        const arcProgress = document.getElementById('arc-progress');
-        const hitbox = document.getElementById('pendulum-hitbox');
+      <div class="card">
+        <div class="card-title">Gebläse</div>
 
-        let isDragging = false;
-        let currentDegree = 90;
-        let kickInProgress = false;
+        <div class="item-row">
+          <div class="item-info">
+            <span class="item-name">Föhn 1</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="relay1-toggle">
+            <span class="slider-round"></span>
+          </label>
+        </div>
 
-        const maxArcLength = Math.PI * 60;
+        <div class="item-row">
+          <div class="item-info">
+            <span class="item-name">Föhn 2</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="relay2-toggle">
+            <span class="slider-round"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        function updatePendulumVisuals(degree) {
-            degree = Math.max(0, Math.min(180, degree));
-            currentDegree = degree;
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', newTheme);
 
-            const rotation = 90 - degree; 
-            if (pendulumArm) pendulumArm.style.transform = `rotate(${rotation}deg)`;
+      const themeIcon = document.getElementById('theme-icon');
+      if (newTheme === 'light') {
+        themeIcon.innerHTML = '<path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06z"></path>';
+      } else {
+        themeIcon.innerHTML = '<path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"></path>';
+      }
+    }
+  </script>
 
-            if (degreeInput && document.activeElement !== degreeInput) {
-                degreeInput.value = Math.round(degree);
-            }
+  <script src="/api.js"></script>
+  <script>
+  const pendulumSvg = document.getElementById('pendulum-svg');
+  const pendulumArm = document.getElementById('pendulum-arm');
+  const degreeInput = document.getElementById('servo-degree');
+  const arcProgress = document.getElementById('arc-progress');
+  const hitbox = document.getElementById('pendulum-hitbox');
+  const presetButtons = document.querySelectorAll('.servo-btn[data-degree]');
+  const kickLeftBtn = document.getElementById('kick-left-btn');
+  const kickRightBtn = document.getElementById('kick-right-btn');
 
-            const offset = maxArcLength * (1 - (degree / 180));
-            if (arcProgress) arcProgress.style.strokeDashoffset = offset;
-        }
+  const motor1Slider = document.getElementById('motor1-slider');
+  const motor2Slider = document.getElementById('motor2-slider');
+  const speed1 = document.getElementById('speed1');
+  const speed2 = document.getElementById('speed2');
 
-        if (degreeInput) {
-            degreeInput.addEventListener('input', (e) => {
-                let val = parseInt(e.target.value);
-                if (!isNaN(val)) {
-                    let clamped = Math.max(0, Math.min(180, val));
-                    const rotation = 90 - clamped; 
-                    if (pendulumArm) pendulumArm.style.transform = `rotate(${rotation}deg)`;
-                    const offset = maxArcLength * (1 - (clamped / 180));
-                    if (arcProgress) arcProgress.style.strokeDashoffset = offset;
-                    currentDegree = clamped;
-                }
-            });
-            degreeInput.addEventListener('change', (e) => {
-                let val = parseInt(e.target.value);
-                if (isNaN(val)) val = currentDegree;
-                updatePendulumVisuals(val);
-                e.target.value = Math.round(currentDegree);
-            });
-        }
+  const relay1Toggle = document.getElementById('relay1-toggle');
+  const relay2Toggle = document.getElementById('relay2-toggle');
 
-        function setServoDegree(degree) {
-            if (kickInProgress) return;
-            pendulumArm.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)';
-            arcProgress.style.transition = 'stroke-dashoffset 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)';
-            updatePendulumVisuals(degree);
-            setTimeout(() => {
-                if(!kickInProgress) {
-                    pendulumArm.style.transition = 'none';
-                    arcProgress.style.transition = 'none';
-                }
-            }, 300);
-        }
+  const serialState = document.getElementById('serial-state');
+  const uidBox = document.getElementById('uid-box');
+  const duckIcon = document.getElementById('duck-icon');
+  const duckText = document.getElementById('duck-text');
+  const rfidText = document.querySelector('[data-hw-rfid]');
+  const ls1El = document.querySelector('[data-hw-ls1]');
+  const ls2El = document.querySelector('[data-hw-ls2]');
 
-        function triggerKick(direction) {
-            if (kickInProgress) return;
-            kickInProgress = true;
+  const SERVO_MIN_DEG = 45;
+  const SERVO_MAX_DEG = 135;
+  const SERVO_MIN_PULSE = 990;
+  const SERVO_MAX_PULSE = 2030;
 
-            const btnLeft = document.getElementById('kick-left-btn');
-            const btnRight = document.getElementById('kick-right-btn');
-            if(btnLeft) btnLeft.disabled = true;
-            if(btnRight) btnRight.disabled = true;
-            if(degreeInput) degreeInput.disabled = true;
+  const POS_REST_LEFT = 990;
+  const POS_KICK_LEFT = 1330;
+  const POS_KICK_RIGHT = 1690;
+  const POS_REST_RIGHT = 2030;
 
-            pendulumArm.style.transition = 'transform 0.2s ease-out';
-            arcProgress.style.transition = 'stroke-dashoffset 0.2s ease-out';
+  const maxArcLength = 94.25;
 
-            if (direction === 'left') {
-                updatePendulumVisuals(135);
-                setTimeout(() => {
-                    pendulumArm.style.transition = 'transform 0.1s cubic-bezier(0.1, 0.9, 0.2, 1)';
-                    arcProgress.style.transition = 'stroke-dashoffset 0.1s cubic-bezier(0.1, 0.9, 0.2, 1)';
-                    updatePendulumVisuals(75);
-                    setTimeout(() => {
-                        pendulumArm.style.transition = 'transform 0.3s ease-in-out';
-                        arcProgress.style.transition = 'stroke-dashoffset 0.3s ease-in-out';
-                        updatePendulumVisuals(135);
-                        setTimeout(() => {
-                            kickInProgress = false;
-                            if(btnLeft) btnLeft.disabled = false;
-                            if(btnRight) btnRight.disabled = false;
-                            if(degreeInput) degreeInput.disabled = false;
-                            pendulumArm.style.transition = 'none';
-                            arcProgress.style.transition = 'none';
-                        }, 300);
-                    }, 400); 
-                }, 1000);
-            } else { 
-                updatePendulumVisuals(45);
-                setTimeout(() => {
-                    pendulumArm.style.transition = 'transform 0.1s cubic-bezier(0.1, 0.9, 0.2, 1)';
-                    arcProgress.style.transition = 'stroke-dashoffset 0.1s cubic-bezier(0.1, 0.9, 0.2, 1)';
-                    updatePendulumVisuals(105);
-                    setTimeout(() => {
-                        pendulumArm.style.transition = 'transform 0.3s ease-in-out';
-                        arcProgress.style.transition = 'stroke-dashoffset 0.3s ease-in-out';
-                        updatePendulumVisuals(45);
-                        setTimeout(() => {
-                            kickInProgress = false;
-                            if(btnLeft) btnLeft.disabled = false;
-                            if(btnRight) btnRight.disabled = false;
-                            if(degreeInput) degreeInput.disabled = false;
-                            pendulumArm.style.transition = 'none';
-                            arcProgress.style.transition = 'none';
-                        }, 300);
-                    }, 400); 
-                }, 1000);
-            }
-        }
+  let currentDegree = 90;
+  let servoUiLockUntil = 0;
+  let isDragging = false;
+  let kickInProgress = false;
+  let lastRfidUid = null;
+  let lastLs1 = null;
+  let lastLs2 = null;
+  let pollBusy = false;
 
-        function handleDrag(evt) {
-            if (!isDragging || kickInProgress) return;
-            evt.preventDefault();
+  function clamp(val, min, max) {
+    return Math.min(max, Math.max(min, val));
+  }
+  
+function degreeToVisual(deg) {
+  return Math.round(clamp(Number(deg) || 90, SERVO_MIN_DEG, SERVO_MAX_DEG));
+}
 
-            const rect = pendulumSvg.getBoundingClientRect();
-            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-
-            const originX = rect.left + rect.width * 0.5;
-            const originY = rect.top + rect.height * 0.25; 
-
-            const dx = clientX - originX;
-            const dy = clientY - originY; 
-
-            let angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            let degree = 180 - angle;
-
-            if (dy < 0 && Math.abs(dx) > Math.abs(dy)) {
-                 if (dx < 0) degree = 0;
-                 if (dx > 0) degree = 180;
-            }
-
-            if(degree < 0) degree = 0;
-            if(degree > 180) degree = 180;
-            updatePendulumVisuals(degree);
-        }
-
-        if (hitbox) {
-            hitbox.addEventListener('mousedown', () => { isDragging = true; hitbox.style.cursor = 'grabbing'; });
-            hitbox.addEventListener('touchstart', (e) => { isDragging = true; handleDrag(e); }, {passive: false});
-            window.addEventListener('mousemove', handleDrag, {passive: false});
-            window.addEventListener('touchmove', handleDrag, {passive: false});
-            window.addEventListener('mouseup', () => { isDragging = false; hitbox.style.cursor = 'grab'; });
-            window.addEventListener('touchend', () => { isDragging = false; });
-        }
-
-        setTimeout(() => updatePendulumVisuals(90), 100);
-</script>
-<script src="./api.js"></script><script>
-function setCardStatus(title, value){const cards=[...document.querySelectorAll('.card')];const card=cards.find(c=>c.innerText.includes(title));if(!card)return;const badge=[...card.querySelectorAll('*')].find(el=>['Frei','Blockiert','--','—'].includes(el.textContent.trim()));if(badge)badge.textContent=value;}
-function setSliderByLabel(label, value){const rows=[...document.querySelectorAll('.slider-row')];const row=rows.find(r=>r.innerText.includes(label));if(!row)return;const slider=row.querySelector('input[type="range"]');if(slider&&Number.isFinite(value))slider.value=value;}
-async function pollHardware(){try{const data=await apiGet('/api/hardware/status');const sensors=data.sensors||{};const actuators=data.actuators||{};setCardStatus('Lichtschranke 1',(sensors.lb_entrance&&sensors.lb_entrance.state)||'—');setCardStatus('Lichtschranke 2',(sensors.lb_diverter&&sensors.lb_diverter.state)||'—');setCardStatus('RFID Reader',(data.rfid&&data.rfid.uid)||'--');setSliderByLabel('Motor 1',Number((actuators.motor_feed&&actuators.motor_feed.speed)??50));setSliderByLabel('Motor 2',Number((actuators.motor_main&&actuators.motor_main.speed)??75));}catch(e){console.error(e);}}
-async function sendCommand(cmd, body={}){try{await apiPost(cmd, body);await pollHardware();}catch(e){console.error(e);alert('API-Fehler: '+e.message);}}
-[...document.querySelectorAll('button')].forEach(btn=>{const t=(btn.textContent||'').trim();if(t==='Start')btn.onclick=()=>sendCommand('/api/hardware/belt/start');if(t==='Stopp')btn.onclick=()=>sendCommand('/api/hardware/belt/stop');if(t==='Fön 1 AN')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_left',state:1});if(t==='Fön 1 AUS')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_left',state:0});if(t==='Fön 2 AN')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_right',state:1});if(t==='Fön 2 AUS')btn.onclick=()=>sendCommand('/api/hardware/relay',{name:'fan_right',state:0});if(t==='Not-Aus')btn.onclick=()=>sendCommand('/api/hardware/emergency-stop');});
-setInterval(pollHardware,1500);pollHardware();
-</script>
-<script>
-(function(){
-  const HZ = 700;
-  const state = { lastStatus:null };
-
-  function normalizeStatus(data){
-    const sensors = data?.sensors || {};
-    const machine = data?.machine || {};
-    const rfid = data?.rfid || null;
-    const actuators = data?.actuators || {};
-    return {
-      serial_connected: !!data?.serial_connected,
-      ls1: sensors.ls1?.state,
-      ls2: sensors.ls2?.state,
-      ls1_event: sensors.ls1?.event || '--',
-      ls2_event: sensors.ls2?.event || '--',
-      rfid_uid: rfid?.uid || data?.last_uid || '--',
-      rfid_status: rfid?.status || '--',
-      belt: machine.belt_state || machine.belt || '--',
-      good: machine.good_count ?? machine.good ?? 0,
-      bad: machine.bad_count ?? machine.bad ?? 0,
-      rest_left: machine.rest_left ?? machine.left ?? null,
-      servo_state: machine.servo_state ?? '--',
-      pwm_fast: machine.pwm_fast ?? actuators.motor_fast?.value ?? 0,
-      pwm_slow: machine.pwm_slow ?? actuators.motor_slow?.value ?? 0,
-      relay1: actuators.relay1?.state ?? 0,
-      relay2: actuators.relay2?.state ?? 0,
-      led: actuators.led?.state ?? 0,
-      event: machine.event || '--'
-    };
+  function pulseToDegree(pulse) {
+    const p = clamp(Number(pulse) || SERVO_MIN_PULSE, SERVO_MIN_PULSE, SERVO_MAX_PULSE);
+    return Math.round(
+      SERVO_MIN_DEG + ((p - SERVO_MIN_PULSE) / (SERVO_MAX_PULSE - SERVO_MIN_PULSE)) * (SERVO_MAX_DEG - SERVO_MIN_DEG)
+    );
   }
 
-  function setText(selectors, value){
-    selectors.forEach(sel => document.querySelectorAll(sel).forEach(el => el.textContent = value));
+  function updateServoVisual(deg) {
+    currentDegree = degreeToVisual(deg);
+
+    if (pendulumArm) {
+        pendulumArm.setAttribute('transform', `rotate(${90 - currentDegree} 0 10)`);
+    }
+
+if (arcProgress) {
+  const ratio = (currentDegree - SERVO_MIN_DEG) / (SERVO_MAX_DEG - SERVO_MIN_DEG);
+  const offset = maxArcLength * (1 - ratio);
+  arcProgress.style.strokeDashoffset = offset;
+}
+
+    if (degreeInput && document.activeElement !== degreeInput) {
+      degreeInput.value = currentDegree;
+    }
   }
 
-  function setBadgeLike(selectors, activeText, inactiveText, active){
-    selectors.forEach(sel => document.querySelectorAll(sel).forEach(el => {
-      el.textContent = active ? activeText : inactiveText;
-      el.dataset.state = active ? 'active' : 'inactive';
-    }));
+  function percentToPwmValue(percent) {
+    const p = clamp(Number(percent) || 0, 0, 100);
+
+    if (p === 0) return 0;
+    return Math.round(91 + ((p - 1) / 99) * (255 - 91));
   }
 
-  async function refreshHardwareStatus(){
+  function pwmValueToPercent(pwm) {
+    const v = clamp(Number(pwm) || 0, 0, 255);
+
+    if (v < 90) return 0;
+    if (v <= 91) return 1;
+
+    return Math.round(1 + ((v - 91) / (255 - 91)) * 99);
+  }
+
+  function updateMotorLabel(el, percent) {
+    if (el) el.textContent = `${Math.round(percent)}%`;
+  }
+
+  function setLsBadge(el, state) {
+    if (!el) return;
+
+    const box = el.closest('.status-box');
+    if (!box) return;
+
+    box.classList.remove('status-frei', 'status-blockiert');
+
+    if (state === 0) {
+      el.textContent = 'Blockiert';
+      box.classList.add('status-blockiert');
+    } else if (state === 1) {
+      el.textContent = 'Frei';
+      box.classList.add('status-frei');
+    } else {
+      el.textContent = 'Unbekannt';
+    }
+  }
+
+  function setRfid(uid, mapping) {
+    if (!rfidText || !uidBox || !duckIcon || !duckText) return;
+
+    if (uid) {
+      lastRfidUid = uid;
+      rfidText.textContent = uid;
+
+      if (mapping && mapping.duck_number !== undefined && mapping.duck_number !== null) {
+        rfidText.textContent = `${uid} (Ente ${mapping.duck_number})`;
+        duckText.textContent = String(mapping.duck_number).padStart(4, '0');
+      } else {
+        duckText.textContent = uid.slice(-4);
+      }
+
+      uidBox.style.borderColor = 'var(--accent-color)';
+      uidBox.style.color = 'var(--accent-color)';
+      duckIcon.style.opacity = '1';
+    } else if (lastRfidUid === null) {
+      rfidText.textContent = '--';
+      uidBox.style.borderColor = 'var(--status-neutral)';
+      uidBox.style.color = 'var(--status-neutral)';
+      duckIcon.style.opacity = '0';
+      duckText.textContent = '0000';
+    }
+  }
+
+  async function sendMotor(name, percent) {
+    const value = percentToPwmValue(percent);
+    await apiPost('/api/hardware/motor', {
+      name,
+      state: value > 0 ? 1 : 0,
+      value
+    });
+  }
+
+  async function sendRelay(name, enabled) {
+    await apiPost('/api/hardware/relay', {
+      name,
+      state: enabled ? 1 : 0
+    });
+  }
+
+    async function sendServoAngle(angle) {
+      const safeAngle = degreeToVisual(angle);
+      servoUiLockUntil = Date.now() + 350;
+      await apiPost('/api/hardware/servo/angle', { angle: safeAngle });
+      updateServoVisual(safeAngle);
+    }
+
+  async function applyServoDegree(angle) {
+    if (!degreeInput) return;
+    const safeAngle = degreeToVisual(angle);
+    degreeInput.value = safeAngle;
+    updateServoVisual(safeAngle);
+    await sendServoAngle(safeAngle);
+  }
+
+  function setServoButtonsDisabled(disabled) {
+    presetButtons.forEach(btn => btn.disabled = disabled);
+    if (kickLeftBtn) kickLeftBtn.disabled = disabled;
+    if (kickRightBtn) kickRightBtn.disabled = disabled;
+    if (degreeInput) degreeInput.disabled = disabled;
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+async function runKickSequence(degrees) {
+  if (kickInProgress) return;
+  kickInProgress = true;
+  setServoButtonsDisabled(true);
+
+  try {
+    for (let i = 0; i < degrees.length; i++) {
+      const deg = degreeToVisual(degrees[i]);
+      await applyServoDegree(deg);
+
+      if (i === 0) {
+        await sleep(1000);
+      } else {
+        await sleep(220);
+      }
+    }
+  } finally {
+    kickInProgress = false;
+    setServoButtonsDisabled(false);
+  }
+}
+
+  async function pollHardware() {
+    if (pollBusy) return;
+    pollBusy = true;
+
     try {
-      const res = await fetch((window.API_BASE||'') + '/api/hardware/status');
-      const data = await res.json();
-      state.lastStatus = normalizeStatus(data);
-      const s = state.lastStatus;
-      setBadgeLike(['[data-hw-ls1]'], 'Blockiert', 'Frei', Number(s.ls1) === 0);
-      setBadgeLike(['[data-hw-ls2]'], 'Blockiert', 'Frei', Number(s.ls2) === 0);
-      setText(['[data-hw-rfid]'], s.rfid_uid || '--');
-      setText(['[data-hw-rfid-status]'], s.rfid_status || '--');
-      setText(['[data-hw-belt-state]'], s.belt || '--');
-      setText(['[data-hw-good]'], String(s.good));
-      setText(['[data-hw-bad]'], String(s.bad));
-      setText(['[data-hw-event]'], s.event || '--');
-      setText(['[data-hw-servo-state]'], String(s.servo_state));
-      setText(['[data-hw-motor-fast]'], String(s.pwm_fast));
-      setText(['[data-hw-motor-slow]'], String(s.pwm_slow));
-      setBadgeLike(['[data-hw-serial]'], 'Verbunden', 'Getrennt', !!s.serial_connected);
-      setBadgeLike(['[data-hw-relay1]'], 'An', 'Aus', Number(s.relay1) === 1);
-      setBadgeLike(['[data-hw-relay2]'], 'An', 'Aus', Number(s.relay2) === 1);
-      setBadgeLike(['[data-hw-led]'], 'An', 'Aus', Number(s.led) === 1);
-    } catch(e) {}
+      const data = await apiGet('/api/hardware/status');
+      const sensors = data?.sensors || {};
+      const actuators = data?.actuators || {};
+
+      if (data?.serial_connected) {
+        serialState.textContent = 'Serielle Verbindung aktiv';
+        serialState.style.color = 'var(--status-free)';
+      } else {
+        serialState.textContent = 'Keine serielle Verbindung';
+        serialState.style.color = 'var(--status-blocked)';
+      }
+
+      const ls1State = sensors?.ls1?.state;
+      const ls2State = sensors?.ls2?.state;
+
+      if (ls1State !== undefined) {
+        lastLs1 = Number(ls1State);
+        setLsBadge(ls1El, lastLs1);
+      } else if (lastLs1 === null) {
+        setLsBadge(ls1El, null);
+      }
+
+      if (ls2State !== undefined) {
+        lastLs2 = Number(ls2State);
+        setLsBadge(ls2El, lastLs2);
+      } else if (lastLs2 === null) {
+        setLsBadge(ls2El, null);
+      }
+
+      const uid = data?.last_uid || data?.rfid?.uid || null;
+      const mapping = data?.rfid_mapping || null;
+      setRfid(uid, mapping);
+
+      const pwmSlow = actuators?.motor_slow?.value ?? null;
+      const pwmFast = actuators?.motor_fast?.value ?? null;
+
+      if (pwmSlow !== null && document.activeElement !== motor1Slider) {
+        const pct = pwmValueToPercent(pwmSlow);
+        motor1Slider.value = pct;
+        updateMotorLabel(speed1, pct);
+      }
+
+      if (pwmFast !== null && document.activeElement !== motor2Slider) {
+        const pct = pwmValueToPercent(pwmFast);
+        motor2Slider.value = pct;
+        updateMotorLabel(speed2, pct);
+      }
+
+      const relay1State = actuators?.relay1?.state ?? actuators?.relay1?.value ?? null;
+      const relay2State = actuators?.relay2?.state ?? actuators?.relay2?.value ?? null;
+
+      if (relay1State !== null && document.activeElement !== relay1Toggle) {
+        relay1Toggle.checked = Number(relay1State) === 1;
+      }
+
+      if (relay2State !== null && document.activeElement !== relay2Toggle) {
+        relay2Toggle.checked = Number(relay2State) === 1;
+      }
+
+    const servoPulse = actuators?.servo?.value ?? null;
+    if (servoPulse !== null && !isDragging && !kickInProgress && Date.now() >= servoUiLockUntil) {
+      const angle = pulseToDegree(servoPulse);
+      updateServoVisual(angle);
+    }
+
+    } catch (e) {
+      console.error('pollHardware', e);
+      if (serialState) {
+        serialState.textContent = 'Fehler beim Abrufen der Hardwaredaten';
+        serialState.style.color = 'var(--status-blocked)';
+      }
+    } finally {
+      pollBusy = false;
+    }
   }
 
-  async function post(path, body={}){
-    const res = await fetch((window.API_BASE||'') + path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-    return res.json();
+  if (degreeInput) {
+    degreeInput.addEventListener('input', () => {
+      const deg = degreeToVisual(degreeInput.value);
+      updateServoVisual(deg);
+    });
+
+    degreeInput.addEventListener('change', async () => {
+      const deg = degreeToVisual(degreeInput.value);
+      degreeInput.value = deg;
+      await sendServoAngle(deg);
+    });
   }
 
-  document.addEventListener('click', async (ev) => {
-    const el = ev.target.closest('[data-hw-action]');
-    if(!el) return;
-    const action = el.getAttribute('data-hw-action');
-    if(action === 'belt-start') await post('/api/hardware/belt/start', {});
-    if(action === 'belt-stop') await post('/api/hardware/belt/stop', {});
-    if(action === 'belt-resume') await post('/api/hardware/belt/resume', {});
-    if(action === 'emergency-stop') await post('/api/hardware/emergency-stop', {});
-    if(action === 'relay1-on') await post('/api/hardware/relay', {name:'relay1', state:1});
-    if(action === 'relay1-off') await post('/api/hardware/relay', {name:'relay1', state:0});
-    if(action === 'relay2-on') await post('/api/hardware/relay', {name:'relay2', state:1});
-    if(action === 'relay2-off') await post('/api/hardware/relay', {name:'relay2', state:0});
-    if(action === 'led-on') await post('/api/hardware/relay', {name:'led', state:1});
-    if(action === 'led-off') await post('/api/hardware/relay', {name:'led', state:0});
-    if(action === 'servo-left') await post('/api/hardware/servo/rest', {side:'left'});
-    if(action === 'servo-right') await post('/api/hardware/servo/rest', {side:'right'});
-    if(action === 'servo-kick-left') await post('/api/hardware/servo/kick', {target:'left'});
-    if(action === 'servo-kick-right') await post('/api/hardware/servo/kick', {target:'right'});
-    if(action === 'ping') await post('/api/hardware/ping', {});
-    if(action === 'motor-fast') {
-      const v = Number(document.querySelector('[data-hw-input="motor-fast"]')?.value || 0);
-      await post('/api/hardware/motor', {name:'motor_fast', state: v > 0 ? 1 : 0, value:v});
-    }
-    if(action === 'motor-slow') {
-      const v = Number(document.querySelector('[data-hw-input="motor-slow"]')?.value || 0);
-      await post('/api/hardware/motor', {name:'motor_slow', state: v > 0 ? 1 : 0, value:v});
-    }
-    if(action === 'auto-sort-on') await post('/api/hardware/config', {auto_sort_enabled:true});
-    if(action === 'auto-sort-off') await post('/api/hardware/config', {auto_sort_enabled:false});
-    setTimeout(refreshHardwareStatus, 150);
+function eventToSvgPoint(evt) {
+  if (!pendulumSvg) return null;
+
+  const pt = pendulumSvg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+
+  const svgPoint = pt.matrixTransform(pendulumSvg.getScreenCTM().inverse());
+  return { x: svgPoint.x, y: svgPoint.y };
+}
+
+function pointerToAngle(evt) {
+  const p = eventToSvgPoint(evt);
+  if (!p) return 90;
+
+  const pivotX = 0;
+  const pivotY = 10;
+
+  const dx = p.x - pivotX;
+  const dy = p.y - pivotY;
+
+  let raw = Math.atan2(dx, dy) * 180 / Math.PI;
+  let deg = 90 + raw;
+
+  deg = clamp(deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+  return Math.round(deg);
+}
+
+
+if (hitbox) {
+  hitbox.addEventListener('pointerdown', (evt) => {
+    if (kickInProgress) return;
+    isDragging = true;
+    hitbox.setPointerCapture(evt.pointerId);
+    hitbox.style.cursor = 'grabbing';
+    evt.preventDefault();
+
+    const deg = pointerToAngle(evt);
+    updateServoVisual(deg);
+    if (degreeInput) degreeInput.value = deg;
   });
 
-  window.refreshHardwareStatus = refreshHardwareStatus;
-  setInterval(refreshHardwareStatus, HZ);
-  document.addEventListener('DOMContentLoaded', refreshHardwareStatus);
-})();
-</script>
+  hitbox.addEventListener('pointermove', (evt) => {
+    if (!isDragging || kickInProgress) return;
+    evt.preventDefault();
 
+    const deg = pointerToAngle(evt);
+    updateServoVisual(deg);
+    if (degreeInput) degreeInput.value = deg;
+  });
+
+  hitbox.addEventListener('pointerup', async (evt) => {
+    if (!isDragging) return;
+    evt.preventDefault();
+
+    const deg = pointerToAngle(evt);
+    isDragging = false;
+    servoUiLockUntil = Date.now() + 350;
+    hitbox.releasePointerCapture(evt.pointerId);
+    hitbox.style.cursor = 'grab';
+
+    updateServoVisual(deg);
+    if (degreeInput) degreeInput.value = deg;
+    await sendServoAngle(deg);
+  });
+
+  hitbox.addEventListener('pointercancel', () => {
+    isDragging = false;
+    hitbox.style.cursor = 'grab';
+  });
+}
+
+  presetButtons.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (kickInProgress) return;
+      const deg = degreeToVisual(btn.dataset.degree);
+      await applyServoDegree(deg);
+    });
+  });
+
+  if (kickLeftBtn) {
+    kickLeftBtn.addEventListener('click', async () => {
+      const restRightDeg = pulseToDegree(POS_REST_RIGHT);
+      const kickLeftDeg = pulseToDegree(POS_KICK_LEFT);
+      await runKickSequence([restRightDeg, kickLeftDeg, restRightDeg]);
+    });
+  }
+
+  if (kickRightBtn) {
+    kickRightBtn.addEventListener('click', async () => {
+      const restLeftDeg = pulseToDegree(POS_REST_LEFT);
+      const kickRightDeg = pulseToDegree(POS_KICK_RIGHT);
+      await runKickSequence([restLeftDeg, kickRightDeg, restLeftDeg]);
+    });
+  }
+
+  if (motor1Slider) {
+    motor1Slider.addEventListener('input', () => {
+      updateMotorLabel(speed1, Number(motor1Slider.value));
+    });
+
+    motor1Slider.addEventListener('change', async () => {
+      await sendMotor('motor_slow', Number(motor1Slider.value));
+    });
+  }
+
+  if (motor2Slider) {
+    motor2Slider.addEventListener('input', () => {
+      updateMotorLabel(speed2, Number(motor2Slider.value));
+    });
+
+    motor2Slider.addEventListener('change', async () => {
+      await sendMotor('motor_fast', Number(motor2Slider.value));
+    });
+  }
+
+  if (relay1Toggle) {
+    relay1Toggle.addEventListener('change', async () => {
+      await sendRelay('relay1', relay1Toggle.checked);
+    });
+  }
+
+  if (relay2Toggle) {
+    relay2Toggle.addEventListener('change', async () => {
+      await sendRelay('relay2', relay2Toggle.checked);
+    });
+  }
+
+  updateServoVisual(90);
+  updateMotorLabel(speed1, Number(motor1Slider?.value || 0));
+  updateMotorLabel(speed2, Number(motor2Slider?.value || 0));
+
+  pollHardware();
+  setInterval(pollHardware, 300);
+</script>
 </body>
 </html>
-
-<!-- hardware bindings: data-hw-ls1 data-hw-ls2 data-hw-rfid -->

@@ -17,12 +17,13 @@ runtime = {
     'current_session_id': None,
     'current_mapping_mode': 'idle',
     'inventory_direction': 'left',
+    'rfid_mode': 'free',
     'latest': {
-    'boot': None,
-    'sensors': {
-        'ls1': {'type': 'sensor', 'name': 'ls1', 'state': 1, 'event': 'init'},
-        'ls2': {'type': 'sensor', 'name': 'ls2', 'state': 1, 'event': 'init'}
-    },
+        'boot': None,
+        'sensors': {
+            'ls1': {'type': 'sensor', 'name': 'ls1', 'state': 1, 'event': 'init'},
+            'ls2': {'type': 'sensor', 'name': 'ls2', 'state': 1, 'event': 'init'}
+        },
         'actuators': {},
         'machine': None,
         'rfid': None,
@@ -121,17 +122,29 @@ def get_uid_mapping(uid):
 
 def handle_evt(evt):
     t = evt.get('type')
+
     if t == 'boot':
         runtime['latest']['boot'] = evt
+        if evt.get('rfid_mode'):
+            runtime['rfid_mode'] = evt.get('rfid_mode')
+
     elif t == 'sensor':
         runtime['latest']['sensors'][evt.get('name', 'unknown')] = evt
+
     elif t == 'actuator':
         runtime['latest']['actuators'][evt.get('name', 'unknown')] = evt
+
     elif t == 'machine':
         runtime['latest']['machine'] = evt
+        if evt.get('rfid_mode'):
+            runtime['rfid_mode'] = evt.get('rfid_mode')
+
     elif t == 'rfid':
         runtime['latest']['rfid'] = evt
         runtime['latest']['last_uid'] = evt.get('uid')
+        if evt.get('mode'):
+            runtime['rfid_mode'] = evt.get('mode')
+
     elif t == 'error':
         runtime['latest']['errors'].append(evt)
         runtime['latest']['errors'] = runtime['latest']['errors'][-50:]
@@ -255,7 +268,10 @@ def hardware_status():
     mapping = get_uid_mapping(uid)
     return jsonify(runtime['latest'] | {
         'serial_connected': runtime['serial_connected'],
-        'rfid_mapping': mapping
+        'rfid_mapping': mapping,
+        'runtime_mode': runtime['mode'],
+        'current_session_id': runtime['current_session_id'],
+        'rfid_mode': runtime['rfid_mode']
     })
 
 @APP.post('/api/hardware/ping')
@@ -315,8 +331,18 @@ def servo_angle():
 def config():
     payload = request.get_json(force=True)
     cmd = {'cmd': 'set_config'}
-    cmd.update({k: payload[k] for k in ('auto_sort_enabled', 'pwm_fast', 'pwm_slow', 'service_mode') if k in payload})
-    return jsonify({'ok': send(cmd), 'sent': cmd})
+    cmd.update({
+        k: payload[k]
+        for k in ('auto_sort_enabled', 'pwm_fast', 'pwm_slow', 'service_mode', 'rfid_mode')
+        if k in payload
+    })
+
+    ok = send(cmd)
+
+    if ok and 'rfid_mode' in payload:
+        runtime['rfid_mode'] = payload['rfid_mode']
+
+    return jsonify({'ok': ok, 'sent': cmd})
 
 if __name__ == '__main__':
     APP.run(host='0.0.0.0', port=5000, debug=True)

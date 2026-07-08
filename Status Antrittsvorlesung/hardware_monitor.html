@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Duck-O-Mat Hardware Monitor</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --card: #1e1e1e;
+      --card2: #252525;
+      --text: #f3f3f3;
+      --muted: #9aa0a6;
+      --border: #333;
+      --accent: #00d2ff;
+      --good: #22c55e;
+      --bad: #ef4444;
+      --warn: #f59e0b;
+      --btn: #2d2d2d;
+      --btn-hover: #3b3b3b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 18px 20px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.3rem;
+      color: var(--accent);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .page {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .card.big {
+      grid-column: 1 / -1;
+    }
+
+    .card h2 {
+      margin: 0 0 14px 0;
+      font-size: 1rem;
+      color: var(--accent);
+    }
+
+    .rfid-box {
+      background: var(--card2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .rfid-main {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: var(--accent);
+      word-break: break-all;
+      margin-bottom: 8px;
+    }
+
+    .rfid-sub {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+      background: var(--card2);
+      border-radius: 10px;
+    }
+
+    .line:last-child {
+      margin-bottom: 0;
+    }
+
+    .line-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .value {
+      font-weight: bold;
+    }
+
+    .badge {
+      min-width: 110px;
+      text-align: center;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-weight: bold;
+    }
+
+    .free {
+      background: #163d24;
+      color: #d1fae5;
+      border-color: #1f6d3a;
+    }
+
+    .blocked {
+      background: #4a1d23;
+      color: #fee2e2;
+      border-color: #8b2630;
+    }
+
+    .unknown {
+      background: #5a4308;
+      color: #fef3c7;
+      border-color: #9a6b08;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: var(--btn);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: var(--btn-hover);
+      border-color: var(--accent);
+    }
+
+    .btn-start {
+      background: #163d24;
+      border-color: #1f6d3a;
+    }
+
+    .btn-stop {
+      background: #4a1d23;
+      border-color: #8b2630;
+    }
+
+    .btn-resume {
+      background: #5a4308;
+      border-color: #9a6b08;
+    }
+
+    .counter-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .counter {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .counter-label {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+
+    .counter-value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+
+    .hint {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .debug {
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      background: var(--card2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .counter-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .line {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .badge {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Duck-O-Mat Hardware Monitor</h1>
+    <div class="actions">
+      <button onclick="location.href='/hardware'">Hardware-Menü</button>
+      <button onclick="refreshNow()">Aktualisieren</button>
+      <button onclick="resetCounters()">Zähler zurücksetzen</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="card">
+      <h2>Aktueller RFID-Scan</h2>
+      <div class="rfid-box" id="uidBox">
+        <div class="rfid-main" id="rfidMain">--</div>
+        <div class="rfid-sub" id="rfidSub">Noch kein RFID-Scan</div>
+      </div>
+      <div class="hint" id="serialState">Verbindung wird geprüft ...</div>
+    </section>
+
+    <section class="card">
+      <h2>Lichtschrankenstatus</h2>
+
+      <div class="line">
+        <div class="line-left">
+          <div class="label">LS1</div>
+          <div class="value">Vordere Lichtschranke</div>
+        </div>
+        <div class="badge unknown" id="ls1Badge">Unbekannt</div>
+      </div>
+
+      <div class="line">
+        <div class="line-left">
+          <div class="label">LS2</div>
+          <div class="value">Hintere Lichtschranke</div>
+        </div>
+        <div class="badge unknown" id="ls2Badge">Unbekannt</div>
+      </div>
+    </section>
+
+    <section class="card big">
+      <h2>Förderbänder</h2>
+      <div class="controls">
+        <button class="btn-start" id="beltStartBtn">Start</button>
+        <button class="btn-stop" id="beltStopBtn">Stopp</button>
+        <button class="btn-resume" id="beltResumeBtn">Fortsetzen</button>
+      </div>
+      <div class="hint">
+        Die Bandsteuerung nutzt dieselben Hardware-Endpunkte wie dein funktionierendes Hardware-Menü.
+      </div>
+    </section>
+
+    <section class="card big">
+      <h2>Erkannte Enten</h2>
+      <div class="counter-grid">
+        <div class="counter">
+          <div class="counter-label">Mit NFC-Tag</div>
+          <div class="counter-value" id="countWithTag">0</div>
+        </div>
+        <div class="counter">
+          <div class="counter-label">Ohne NFC-Tag</div>
+          <div class="counter-value" id="countWithoutTag">0</div>
+        </div>
+        <div class="counter">
+          <div class="counter-label">Gesamt</div>
+          <div class="counter-value" id="countTotal">0</div>
+        </div>
+      </div>
+
+      <div class="debug" id="logicState">Wartet auf LS1 ...</div>
+    </section>
+  </main>
+
+  <script>
+    async function apiGet(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      return await res.json();
+    }
+
+    async function apiPost(url, body = {}) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      return await res.json();
+    }
+
+    const serialState = document.getElementById('serialState');
+    const rfidMain = document.getElementById('rfidMain');
+    const rfidSub = document.getElementById('rfidSub');
+    const uidBox = document.getElementById('uidBox');
+
+    const ls1Badge = document.getElementById('ls1Badge');
+    const ls2Badge = document.getElementById('ls2Badge');
+
+    const countWithTagEl = document.getElementById('countWithTag');
+    const countWithoutTagEl = document.getElementById('countWithoutTag');
+    const countTotalEl = document.getElementById('countTotal');
+
+    const beltStartBtn = document.getElementById('beltStartBtn');
+    const beltStopBtn = document.getElementById('beltStopBtn');
+    const beltResumeBtn = document.getElementById('beltResumeBtn');
+
+    const logicState = document.getElementById('logicState');
+
+    let pollBusy = false;
+
+    function setBadge(el, state) {
+      el.classList.remove('free', 'blocked', 'unknown');
+
+      if (state === 1) {
+        el.textContent = 'Frei';
+        el.classList.add('free');
+      } else if (state === 0) {
+        el.textContent = 'Blockiert';
+        el.classList.add('blocked');
+      } else {
+        el.textContent = 'Unbekannt';
+        el.classList.add('unknown');
+      }
+    }
+
+    function updateRfidDisplay(uid, mapping) {
+      if (uid) {
+        const duckNumber = mapping && mapping.duck_number !== undefined && mapping.duck_number !== null
+          ? mapping.duck_number
+          : null;
+
+        rfidMain.textContent = uid;
+        rfidSub.textContent = duckNumber !== null
+          ? `Ente ${String(duckNumber).padStart(4, '0')}`
+          : 'Tag erkannt, aber kein Mapping gefunden';
+
+        uidBox.style.borderColor = 'var(--accent)';
+      } else {
+        rfidMain.textContent = '--';
+        rfidSub.textContent = 'Kein aktueller RFID-Scan';
+        uidBox.style.borderColor = 'var(--border)';
+      }
+    }
+
+    function renderStatus(data) {
+      serialState.textContent = data.serial_connected
+        ? 'Serielle Verbindung aktiv'
+        : 'Keine serielle Verbindung';
+      serialState.style.color = data.serial_connected ? 'var(--good)' : 'var(--bad)';
+
+      const sensors = data.sensors || {};
+      const ls1 = sensors?.ls1?.state !== undefined ? Number(sensors.ls1.state) : null;
+      const ls2 = sensors?.ls2?.state !== undefined ? Number(sensors.ls2.state) : null;
+
+      setBadge(ls1Badge, ls1);
+      setBadge(ls2Badge, ls2);
+
+      updateRfidDisplay(data?.rfid?.uid || null, data?.rfid?.mapping || null);
+
+      countWithTagEl.textContent = data?.counts?.with_tag ?? 0;
+      countWithoutTagEl.textContent = data?.counts?.without_tag ?? 0;
+      countTotalEl.textContent = data?.counts?.total ?? 0;
+
+      const current = data?.current_duck || {};
+      const last = data?.last_completed_duck || null;
+
+      let text = '';
+      text += `Aktives Objekt: ${current.active ? 'ja' : 'nein'}\n`;
+      text += `LS1 gesehen: ${current.saw_ls1 ? 'ja' : 'nein'}\n`;
+      text += `RFID gesehen: ${current.saw_rfid ? 'ja' : 'nein'}\n`;
+      text += `UID im aktuellen Objekt: ${current.uid || '--'}\n`;
+
+      if (last) {
+        text += `Letzte Entscheidung: ${last.result}\n`;
+        text += `Letzte UID: ${last.uid || '--'}\n`;
+        text += `Start: ${last.started_at || '--'}\n`;
+        text += `Ende: ${last.finished_at || '--'}`;
+      } else {
+        text += 'Noch keine abgeschlossene Ente.';
+      }
+
+      logicState.textContent = text;
+    }
+
+    async function pollStatus() {
+      if (pollBusy) return;
+      pollBusy = true;
+
+      try {
+        const data = await apiGet('/api/hardware/monitor');
+        renderStatus(data);
+      } catch (err) {
+        console.error('pollStatus', err);
+        serialState.textContent = 'Fehler beim Abrufen der Monitordaten';
+        serialState.style.color = 'var(--bad)';
+      } finally {
+        pollBusy = false;
+      }
+    }
+
+    async function refreshNow() {
+      await pollStatus();
+    }
+
+    async function resetCounters() {
+      await apiPost('/api/hardware/monitor/reset');
+      await pollStatus();
+    }
+
+    beltStartBtn.addEventListener('click', async () => {
+      await apiPost('/api/hardware/belt/start');
+    });
+
+    beltStopBtn.addEventListener('click', async () => {
+      await apiPost('/api/hardware/belt/stop');
+    });
+
+    beltResumeBtn.addEventListener('click', async () => {
+      await apiPost('/api/hardware/belt/resume');
+    });
+
+    pollStatus();
+    setInterval(pollStatus, 200);
+  </script>
+</body>
+</html>

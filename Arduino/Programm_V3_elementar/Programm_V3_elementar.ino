@@ -18,25 +18,25 @@ ServoTimer2 myServo;
 
 const uint8_t PWM_FAST_DEFAULT = 255;
 const uint8_t PWM_SLOW_DEFAULT = 100;
+const unsigned long KLOEPPEL_DELAY = 640;
 const int POS_REST_LEFT = 990;
 const int POS_KICK_LEFT = 1330;
 const int POS_KICK_RIGHT = 1690;
 const int POS_REST_RIGHT = 2030;
-
+const unsigned long TIME_KICK = 280;
+const unsigned long TIME_RETURN_NORMAL = 280;
+const unsigned long TIME_RETURN_SWITCH = 150;
+const unsigned long BAND1_DELAY_MS = 2000;
 const unsigned long FUZZ_FILTER_MS = 25;
 const unsigned long DUCK_BLIND_MS = 400;
+const unsigned long QUEUE_TIMEOUT_MS = 2000;
 const unsigned long RFID_DUP_MS = 1000;
-const unsigned long RFID_FREE_COOLDOWN_MS = 250;
-const unsigned long QUEUE_TIMEOUT_MS = 2500;
 
 #define MAX_DUCKS 6
 #define UID_HEX_LEN 15
 
-enum BeltState { STOPPED, RUNNING };
-enum RFIDMode { RFID_OFF, RFID_FREE, RFID_QUEUE_AFTER_LS1 };
-
+enum BeltState { STOPPED, RUNNING, CLEARING };
 BeltState currentBeltState = STOPPED;
-RFIDMode currentRFIDMode = RFID_FREE;
 
 struct Duck {
   unsigned long ls1Time;
@@ -48,24 +48,29 @@ struct Duck {
 Duck queue[MAX_DUCKS];
 
 bool nfcAktiv = false;
-bool autoSortEnabled = false;
-bool serviceMode = true;
 bool restPositionIsLeft = true;
-
+bool autoSortEnabled = true;
+bool serviceMode = true;
+uint8_t badDucksCount = 0;
+uint8_t goodDucksCount = 0;
 uint8_t pwmFastCurrent = PWM_FAST_DEFAULT;
 uint8_t pwmSlowCurrent = PWM_SLOW_DEFAULT;
-
-uint8_t stateLS1 = 0;
-uint8_t stateLS2 = 0;
-unsigned long timerLS1 = 0;
-unsigned long timerLS2 = 0;
+unsigned long pauseStartTime = 0;
+unsigned long band1StopTime = 0;
 
 uint8_t lastUID[7];
 uint8_t lastUIDLen = 0;
 unsigned long lastUIDTime = 0;
-unsigned long lastFreeReadTime = 0;
 
-char serialBuffer[160];
+uint8_t stateLS1 = 0;
+uint8_t stateLS2 = 0;
+uint8_t servoState = 0;
+unsigned long timerLS1 = 0;
+unsigned long timerLS2 = 0;
+unsigned long servoMoveTimer = 0;
+unsigned long servoReturnWaitTime = TIME_RETURN_NORMAL;
+
+char serialBuffer[128];
 uint8_t serialPos = 0;
 
 #define F_ACTIVE 0x01
@@ -83,9 +88,14 @@ void checkLS1();
 void checkLS2();
 void checkRFID();
 void cleanupQueue();
+void processQueue();
+void handleServoStateMachine();
+void processAutoDecision(uint8_t i);
 
 void jsonKV(const __FlashStringHelper* k, const char* v, bool comma = true) {
-  Serial.print('"'); Serial.print(k); Serial.print(F("\":"));
+  Serial.print('"');
+  Serial.print(k);
+  Serial.print(F("\":"));
   Serial.print('"');
   while (*v) {
     if (*v == '"' || *v == '\\') Serial.print('\\');
@@ -96,13 +106,17 @@ void jsonKV(const __FlashStringHelper* k, const char* v, bool comma = true) {
 }
 
 void jsonKVNum(const __FlashStringHelper* k, long v, bool comma = true) {
-  Serial.print('"'); Serial.print(k); Serial.print(F("\":"));
+  Serial.print('"');
+  Serial.print(k);
+  Serial.print(F("\":"));
   Serial.print(v);
   if (comma) Serial.print(',');
 }
 
 void jsonKVBool(const __FlashStringHelper* k, bool v, bool comma = true) {
-  Serial.print('"'); Serial.print(k); Serial.print(F("\":"));
+  Serial.print('"');
+  Serial.print(k);
+  Serial.print(F("\":"));
   Serial.print(v ? F("true") : F("false"));
   if (comma) Serial.print(',');
 }
@@ -113,20 +127,8 @@ void jsonEnd() { Serial.println('}'); }
 const char* beltStateToString(BeltState s) {
   if (s == STOPPED) return "STOPPED";
   if (s == RUNNING) return "RUNNING";
+  if (s == CLEARING) return "CLEARING";
   return "UNKNOWN";
-}
-
-const char* rfidModeToString(RFIDMode m) {
-  if (m == RFID_OFF) return "off";
-  if (m == RFID_FREE) return "free";
-  if (m == RFID_QUEUE_AFTER_LS1) return "queue_after_ls1";
-  return "unknown";
-}
-
-uint8_t activeQueueCount() {
-  uint8_t cnt = 0;
-  for (uint8_t i = 0; i < MAX_DUCKS; i++) if (qActive(i)) cnt++;
-  return cnt;
 }
 
 void emitBoot(const char* detail) {
@@ -135,7 +137,6 @@ void emitBoot(const char* detail) {
   jsonKV(F("status"), "ok");
   jsonKV(F("detail"), detail);
   jsonKVBool(F("nfc_active"), nfcAktiv);
-  jsonKV(F("rfid_mode"), rfidModeToString(currentRFIDMode));
   jsonKVBool(F("auto_sort_enabled"), autoSortEnabled, false);
   jsonEnd();
 }
@@ -145,12 +146,14 @@ void emitMachine(const char* eventName) {
   jsonKV(F("type"), "machine");
   jsonKV(F("event"), eventName);
   jsonKV(F("belt_state"), beltStateToString(currentBeltState));
-  jsonKV(F("rfid_mode"), rfidModeToString(currentRFIDMode));
-  jsonKVNum(F("queue_active"), (long)activeQueueCount());
+  jsonKVNum(F("good_count"), (long)goodDucksCount);
+  jsonKVNum(F("bad_count"), (long)badDucksCount);
   jsonKVBool(F("rest_left"), restPositionIsLeft);
+  jsonKVNum(F("servo_state"), (long)servoState);
   jsonKVNum(F("pwm_fast"), (long)pwmFastCurrent);
   jsonKVNum(F("pwm_slow"), (long)pwmSlowCurrent);
-  jsonKVBool(F("auto_sort_enabled"), autoSortEnabled, false);
+  jsonKVBool(F("auto_sort_enabled"), autoSortEnabled);
+  jsonKVBool(F("service_mode"), serviceMode, false);
   jsonEnd();
 }
 
@@ -172,26 +175,12 @@ void emitActuator(const char* name, uint8_t state, int value) {
   jsonEnd();
 }
 
-void emitRFID(const char* uid, int slot, const char* modeName) {
+void emitRFID(const char* uid, int slot) {
   jsonBegin();
   jsonKV(F("type"), "rfid");
   jsonKV(F("uid"), uid);
   jsonKV(F("status"), "ok");
-  jsonKV(F("mode"), modeName);
   jsonKVNum(F("slot"), (long)slot, false);
-  jsonEnd();
-}
-
-void emitQueueEvent(const char* eventName, int slot, const char* uid, unsigned long ls1Time, unsigned long ls2Time) {
-  jsonBegin();
-  jsonKV(F("type"), "machine");
-  jsonKV(F("event"), eventName);
-  jsonKVNum(F("slot"), slot);
-  jsonKV(F("uid"), (uid && uid[0]) ? uid : "");
-  jsonKVNum(F("ls1_ms"), (long)ls1Time);
-  jsonKVNum(F("ls2_ms"), (long)ls2Time);
-  jsonKV(F("belt_state"), beltStateToString(currentBeltState));
-  jsonKV(F("rfid_mode"), rfidModeToString(currentRFIDMode), false);
   jsonEnd();
 }
 
@@ -212,28 +201,6 @@ void uidToHex(uint8_t* uid, uint8_t uidLen, char* out, size_t outSize) {
   out[pos] = '\0';
 }
 
-bool isDuplicateUID(uint8_t* uid, uint8_t uidLen) {
-  if (uidLen != lastUIDLen) return false;
-  if (millis() - lastUIDTime >= RFID_DUP_MS) return false;
-  for (uint8_t i = 0; i < uidLen; i++) {
-    if (uid[i] != lastUID[i]) return false;
-  }
-  return true;
-}
-
-void rememberUID(uint8_t* uid, uint8_t uidLen) {
-  lastUIDLen = uidLen;
-  for (uint8_t i = 0; i < uidLen; i++) lastUID[i] = uid[i];
-  lastUIDTime = millis();
-}
-
-void clearQueueSlot(uint8_t i) {
-  queue[i].flags = 0;
-  queue[i].ls1Time = 0;
-  queue[i].ls2Time = 0;
-  queue[i].uidHex[0] = '\0';
-}
-
 void setMotorFast(uint8_t pwm) {
   pwmFastCurrent = pwm;
   analogWrite(PIN_MOTOR_SCHNELL, pwm);
@@ -251,10 +218,22 @@ void setRelay(uint8_t pin, const char* name, uint8_t state) {
   emitActuator(name, state ? 1 : 0, state ? 1 : 0);
 }
 
+void setServoPulse(int pulse, bool detachAfter = true) {
+  pulse = constrain(pulse, POS_REST_LEFT, POS_REST_RIGHT);
+  myServo.attach(PIN_SERVO);
+  myServo.write(pulse);
+  delay(250);
+  if (detachAfter) myServo.detach();
+  emitActuator("servo", 1, pulse);
+}
+
 void stopBelts() {
   analogWrite(PIN_MOTOR_SCHNELL, 0);
   analogWrite(PIN_MOTOR_LANGSAM, 0);
+  if (currentBeltState != STOPPED) pauseStartTime = millis();
   currentBeltState = STOPPED;
+  emitActuator("motor_fast", 0, 0);
+  emitActuator("motor_slow", 0, 0);
   emitMachine("belts_stopped");
 }
 
@@ -262,39 +241,38 @@ void startBelts() {
   analogWrite(PIN_MOTOR_SCHNELL, pwmFastCurrent);
   analogWrite(PIN_MOTOR_LANGSAM, pwmSlowCurrent);
   currentBeltState = RUNNING;
+  emitActuator("motor_fast", pwmFastCurrent > 0, pwmFastCurrent);
+  emitActuator("motor_slow", pwmSlowCurrent > 0, pwmSlowCurrent);
   emitMachine("belts_started");
 }
 
 void resumeBelts() {
+  if (pauseStartTime > 0) {
+    unsigned long pausedDuration = millis() - pauseStartTime;
+    for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+      if (qActive(i) && qLS2(i)) queue[i].ls2Time += pausedDuration;
+      if (qActive(i) && !qLS2(i)) queue[i].ls1Time += pausedDuration;
+    }
+    pauseStartTime = 0;
+  }
+  goodDucksCount = 0;
   startBelts();
   emitMachine("belts_resumed");
 }
 
 void emergencyStop() {
   stopBelts();
-  for (uint8_t i = 0; i < MAX_DUCKS; i++) clearQueueSlot(i);
+  for (uint8_t i = 0; i < MAX_DUCKS; i++) queue[i].flags = 0;
   myServo.detach();
+  servoState = 0;
+  badDucksCount = 0;
+  goodDucksCount = 0;
   emitMachine("emergency_stop");
 }
 
 void servoRest(bool left) {
   restPositionIsLeft = left;
-  myServo.attach(PIN_SERVO);
-  myServo.write(left ? POS_REST_LEFT : POS_REST_RIGHT);
-  delay(250);
-  myServo.detach();
-  emitActuator("servo", 1, left ? POS_REST_LEFT : POS_REST_RIGHT);
-  emitMachine("servo_rest_set");
-}
-
-void servoPulseDirect(int pulse) {
-  pulse = constrain(pulse, POS_REST_LEFT, POS_REST_RIGHT);
-  myServo.attach(PIN_SERVO);
-  myServo.write(pulse);
-  delay(80);
-  myServo.detach();
-  emitActuator("servo", 1, pulse);
-  emitMachine("servo_direct_set");
+  setServoPulse(left ? POS_REST_LEFT : POS_REST_RIGHT);
 }
 
 void servoKickToTarget(const char* target) {
@@ -303,26 +281,94 @@ void servoKickToTarget(const char* target) {
 
   if (left) {
     myServo.write(POS_REST_RIGHT);
-    delay(60);
+    delay(1000);
     myServo.write(POS_KICK_LEFT);
-    delay(280);
+    delay(TIME_KICK);
     myServo.write(POS_REST_RIGHT);
-    delay(280);
+    delay(TIME_RETURN_NORMAL);
     restPositionIsLeft = false;
     emitActuator("servo", 1, POS_KICK_LEFT);
   } else {
     myServo.write(POS_REST_LEFT);
-    delay(60);
+    delay(1000);
     myServo.write(POS_KICK_RIGHT);
-    delay(280);
+    delay(TIME_KICK);
     myServo.write(POS_REST_LEFT);
-    delay(280);
+    delay(TIME_RETURN_NORMAL);
     restPositionIsLeft = true;
     emitActuator("servo", 1, POS_KICK_RIGHT);
   }
 
   myServo.detach();
-  emitMachine("servo_kick_done");
+}
+
+void cleanupQueue() {
+  for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+    if (qActive(i) && !qLS2(i) && millis() - queue[i].ls1Time > QUEUE_TIMEOUT_MS) {
+      queue[i].flags = 0;
+      emitError("QUEUE_TIMEOUT");
+    }
+  }
+}
+
+void processAutoDecision(uint8_t i) {
+  bool hadRFID = qHasRFID(i);
+  queue[i].flags = 0;
+
+  if (hadRFID) {
+    goodDucksCount++;
+    emitMachine("good_duck_passed");
+
+    if (goodDucksCount >= 3 && currentBeltState == RUNNING) {
+      setMotorSlow(0);
+      currentBeltState = CLEARING;
+      band1StopTime = millis() + BAND1_DELAY_MS;
+      emitMachine("good_limit_reached_clearing");
+    }
+  } else {
+    badDucksCount++;
+    servoState = 1;
+    servoMoveTimer = millis();
+    myServo.attach(PIN_SERVO);
+    myServo.write(restPositionIsLeft ? POS_KICK_RIGHT : POS_KICK_LEFT);
+    emitActuator("servo", 1, restPositionIsLeft ? POS_KICK_RIGHT : POS_KICK_LEFT);
+    emitMachine("bad_duck_kick_started");
+  }
+}
+
+void processQueue() {
+  if (!autoSortEnabled || servoState != 0) return;
+
+  for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+    if (qActive(i) && qLS2(i) && millis() - queue[i].ls2Time >= KLOEPPEL_DELAY) {
+      processAutoDecision(i);
+      break;
+    }
+  }
+}
+
+void handleServoStateMachine() {
+  if (servoState == 1 && millis() - servoMoveTimer >= TIME_KICK) {
+    servoState = 2;
+    servoMoveTimer = millis();
+
+    if (badDucksCount >= 3) {
+      badDucksCount = 0;
+      restPositionIsLeft = !restPositionIsLeft;
+      servoReturnWaitTime = TIME_RETURN_SWITCH;
+    } else {
+      servoReturnWaitTime = TIME_RETURN_NORMAL;
+    }
+
+    myServo.write(restPositionIsLeft ? POS_REST_LEFT : POS_REST_RIGHT);
+    emitActuator("servo", 1, restPositionIsLeft ? POS_REST_LEFT : POS_REST_RIGHT);
+    emitMachine("servo_return_started");
+  }
+  else if (servoState == 2 && millis() - servoMoveTimer >= servoReturnWaitTime) {
+    myServo.detach();
+    servoState = 0;
+    emitMachine("servo_cycle_done");
+  }
 }
 
 void checkLS1() {
@@ -334,30 +380,27 @@ void checkLS1() {
       timerLS1 = millis();
       emitSensor("ls1", 0, "candidate_low");
     }
-  } else if (stateLS1 == 1) {
+  }
+  else if (stateLS1 == 1) {
     if (currentLS1 == HIGH) {
       stateLS1 = 0;
       emitSensor("ls1", 1, "fuzz_rejected");
-    } else if (millis() - timerLS1 >= FUZZ_FILTER_MS) {
+    }
+    else if (millis() - timerLS1 >= FUZZ_FILTER_MS) {
       stateLS1 = 2;
-      bool queued = false;
-      if (currentRFIDMode == RFID_QUEUE_AFTER_LS1) {
-        for (uint8_t i = 0; i < MAX_DUCKS; i++) {
-          if (!qActive(i)) {
-            queue[i].flags = F_ACTIVE;
-            queue[i].ls1Time = timerLS1;
-            queue[i].ls2Time = 0;
-            queue[i].uidHex[0] = '\0';
-            emitQueueEvent("ls1_enqueued", i, "", queue[i].ls1Time, queue[i].ls2Time);
-            queued = true;
-            break;
-          }
+      for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+        if (!qActive(i)) {
+          queue[i].flags = F_ACTIVE;
+          queue[i].ls1Time = timerLS1;
+          queue[i].ls2Time = 0;
+          queue[i].uidHex[0] = '\0';
+          break;
         }
-        if (!queued) emitError("QUEUE_FULL");
       }
       emitSensor("ls1", 0, "duck_confirmed");
     }
-  } else if (stateLS1 == 2) {
+  }
+  else if (stateLS1 == 2) {
     if (millis() - timerLS1 >= DUCK_BLIND_MS && currentLS1 == HIGH) {
       stateLS1 = 0;
       emitSensor("ls1", 1, "ready_again");
@@ -374,39 +417,38 @@ void checkLS2() {
       timerLS2 = millis();
       emitSensor("ls2", 0, "candidate_low");
     }
-  } else if (stateLS2 == 1) {
+  }
+  else if (stateLS2 == 1) {
     if (currentLS2 == HIGH) {
       stateLS2 = 0;
       emitSensor("ls2", 1, "fuzz_rejected");
-    } else if (millis() - timerLS2 >= FUZZ_FILTER_MS) {
+    }
+    else if (millis() - timerLS2 >= FUZZ_FILTER_MS) {
       stateLS2 = 2;
+      int targetIdx = -1;
+      unsigned long oldest = 0xFFFFFFFF;
 
-      if (currentRFIDMode == RFID_QUEUE_AFTER_LS1) {
-        int targetIdx = -1;
-        unsigned long oldest = 0xFFFFFFFF;
-
-        for (uint8_t i = 0; i < MAX_DUCKS; i++) {
-          if (qActive(i) && !qLS2(i)) {
-            unsigned long travelTime = timerLS2 - queue[i].ls1Time;
-            if (travelTime >= 150 && travelTime <= 1500 && queue[i].ls1Time < oldest) {
-              oldest = queue[i].ls1Time;
-              targetIdx = i;
-            }
+      for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+        if (qActive(i) && !qLS2(i)) {
+          unsigned long travelTime = timerLS2 - queue[i].ls1Time;
+          if (travelTime >= 150 && travelTime <= 1200 && queue[i].ls1Time < oldest) {
+            oldest = queue[i].ls1Time;
+            targetIdx = i;
           }
         }
+      }
 
-        if (targetIdx != -1) {
-          qSet(targetIdx, F_LS2, true);
-          queue[targetIdx].ls2Time = timerLS2;
-          emitQueueEvent("ls2_matched", targetIdx, queue[targetIdx].uidHex, queue[targetIdx].ls1Time, queue[targetIdx].ls2Time);
-        } else {
-          emitError("LS2_ORPHAN");
-        }
+      if (targetIdx != -1) {
+        qSet(targetIdx, F_LS2, true);
+        queue[targetIdx].ls2Time = timerLS2;
+      } else {
+        emitError("LS2_ORPHAN");
       }
 
       emitSensor("ls2", 0, "duck_confirmed");
     }
-  } else if (stateLS2 == 2) {
+  }
+  else if (stateLS2 == 2) {
     if (millis() - timerLS2 >= DUCK_BLIND_MS && currentLS2 == HIGH) {
       stateLS2 = 0;
       emitSensor("ls2", 1, "ready_again");
@@ -415,89 +457,64 @@ void checkLS2() {
 }
 
 void checkRFID() {
-  if (!nfcAktiv || currentRFIDMode == RFID_OFF) return;
-
-  bool shouldRead = false;
-
-  if (currentRFIDMode == RFID_FREE) {
-    if (millis() - lastFreeReadTime >= RFID_FREE_COOLDOWN_MS) {
-      shouldRead = true;
-    }
-  } else if (currentRFIDMode == RFID_QUEUE_AFTER_LS1) {
-    for (uint8_t i = 0; i < MAX_DUCKS; i++) {
-      if (qActive(i) && !qHasRFID(i)) {
-        shouldRead = true;
-        break;
-      }
+  bool duckWaiting = false;
+  for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+    if (qActive(i) && !qHasRFID(i) && !qLS2(i)) {
+      duckWaiting = true;
+      break;
     }
   }
-
-  if (!shouldRead) return;
+  if (!duckWaiting) return;
 
   uint8_t uid[7], uidLen;
-  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 45)) return;
-  if (isDuplicateUID(uid, uidLen)) return;
+  if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 45)) {
+    bool isDuplicate = false;
 
-  char uidHex[UID_HEX_LEN];
-  uidToHex(uid, uidLen, uidHex, sizeof(uidHex));
-  rememberUID(uid, uidLen);
-
-  if (currentRFIDMode == RFID_FREE) {
-    lastFreeReadTime = millis();
-    emitRFID(uidHex, -1, "free");
-    emitMachine("rfid_free_read");
-    return;
-  }
-
-  int targetIdx = -1;
-  unsigned long oldest = 0xFFFFFFFF;
-
-  for (uint8_t i = 0; i < MAX_DUCKS; i++) {
-    if (qActive(i) && !qHasRFID(i) && queue[i].ls1Time < oldest) {
-      oldest = queue[i].ls1Time;
-      targetIdx = i;
-    }
-  }
-
-  if (targetIdx != -1) {
-    qSet(targetIdx, F_HAS_RFID, true);
-    strncpy(queue[targetIdx].uidHex, uidHex, UID_HEX_LEN - 1);
-    queue[targetIdx].uidHex[UID_HEX_LEN - 1] = '\0';
-    emitRFID(uidHex, targetIdx, "queue_after_ls1");
-    emitQueueEvent("rfid_matched", targetIdx, queue[targetIdx].uidHex, queue[targetIdx].ls1Time, queue[targetIdx].ls2Time);
-  } else {
-    emitRFID(uidHex, -1, "queue_after_ls1");
-    emitError("RFID_ORPHAN");
-  }
-}
-
-void cleanupQueue() {
-  if (currentRFIDMode != RFID_QUEUE_AFTER_LS1) return;
-
-  unsigned long now = millis();
-  for (uint8_t i = 0; i < MAX_DUCKS; i++) {
-    if (!qActive(i)) continue;
-
-    if (!qLS2(i) && now - queue[i].ls1Time > QUEUE_TIMEOUT_MS) {
-      emitQueueEvent("queue_timeout_before_ls2", i, queue[i].uidHex, queue[i].ls1Time, queue[i].ls2Time);
-      clearQueueSlot(i);
-      emitError("QUEUE_TIMEOUT");
-      continue;
+    if (uidLen == lastUIDLen && millis() - lastUIDTime < RFID_DUP_MS) {
+      isDuplicate = true;
+      for (uint8_t i = 0; i < uidLen; i++) {
+        if (uid[i] != lastUID[i]) {
+          isDuplicate = false;
+          break;
+        }
+      }
     }
 
-    if (qLS2(i) && now - queue[i].ls2Time > 1500) {
-      emitQueueEvent("queue_done_after_ls2", i, queue[i].uidHex, queue[i].ls1Time, queue[i].ls2Time);
-      clearQueueSlot(i);
+    if (!isDuplicate) {
+      char uidHex[UID_HEX_LEN];
+      uidToHex(uid, uidLen, uidHex, sizeof(uidHex));
+
+      int targetIdx = -1;
+      unsigned long oldest = 0xFFFFFFFF;
+
+      for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+        if (qActive(i) && !qHasRFID(i) && !qLS2(i) && queue[i].ls1Time < oldest) {
+          oldest = queue[i].ls1Time;
+          targetIdx = i;
+        }
+      }
+
+      if (targetIdx != -1) {
+        qSet(targetIdx, F_HAS_RFID, true);
+        strncpy(queue[targetIdx].uidHex, uidHex, UID_HEX_LEN - 1);
+        queue[targetIdx].uidHex[UID_HEX_LEN - 1] = '\0';
+        emitRFID(uidHex, targetIdx);
+      }
+
+      lastUIDLen = uidLen;
+      for (uint8_t i = 0; i < uidLen; i++) lastUID[i] = uid[i];
+      lastUIDTime = millis();
     }
   }
 }
 
 bool extractStringValue(const char* src, const char* key, char* out, size_t outSize) {
-  char pattern[24];
+  char pattern[22];
   snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
   char* p = strstr((char*)src, pattern);
   if (!p) return false;
   p += strlen(pattern);
+
   size_t i = 0;
   while (*p && *p != '"' && i + 1 < outSize) out[i++] = *p++;
   out[i] = '\0';
@@ -505,7 +522,7 @@ bool extractStringValue(const char* src, const char* key, char* out, size_t outS
 }
 
 bool extractIntValue(const char* src, const char* key, long* out) {
-  char pattern[24];
+  char pattern[22];
   snprintf(pattern, sizeof(pattern), "\"%s\":", key);
   char* p = strstr((char*)src, pattern);
   if (!p) return false;
@@ -515,25 +532,25 @@ bool extractIntValue(const char* src, const char* key, long* out) {
 }
 
 bool extractBoolValue(const char* src, const char* key, bool* out) {
-  char pattern[24];
+  char pattern[22];
   snprintf(pattern, sizeof(pattern), "\"%s\":", key);
   char* p = strstr((char*)src, pattern);
   if (!p) return false;
   p += strlen(pattern);
-  if (!strncmp(p, "true", 4)) { *out = true; return true; }
-  if (!strncmp(p, "false", 5)) { *out = false; return true; }
+
+  if (!strncmp(p, "true", 4)) {
+    *out = true;
+    return true;
+  }
+  if (!strncmp(p, "false", 5)) {
+    *out = false;
+    return true;
+  }
   return false;
 }
 
-RFIDMode parseRFIDMode(const char* mode) {
-  if (!strcmp(mode, "off")) return RFID_OFF;
-  if (!strcmp(mode, "free")) return RFID_FREE;
-  if (!strcmp(mode, "queue_after_ls1")) return RFID_QUEUE_AFTER_LS1;
-  return currentRFIDMode;
-}
-
 void handleJsonCommand(char* line) {
-  char cmd[20] = "";
+  char cmd[16] = "";
   if (!extractStringValue(line, "cmd", cmd, sizeof(cmd))) {
     emitError("CMD_MISSING");
     return;
@@ -545,11 +562,12 @@ void handleJsonCommand(char* line) {
   }
 
   if (!strcmp(cmd, "belt")) {
-    char action[12] = "";
+    char action[10] = "";
     if (!extractStringValue(line, "action", action, sizeof(action))) {
       emitError("BELT_ACTION");
       return;
     }
+
     if (!strcmp(action, "start")) startBelts();
     else if (!strcmp(action, "stop")) stopBelts();
     else if (!strcmp(action, "resume")) resumeBelts();
@@ -558,26 +576,34 @@ void handleJsonCommand(char* line) {
   }
 
   if (!strcmp(cmd, "actuator")) {
-    char name[16] = "";
+    char name[14] = "";
     long state = 0, value = 0;
+
     extractStringValue(line, "name", name, sizeof(name));
     extractIntValue(line, "state", &state);
     extractIntValue(line, "value", &value);
 
     if (!strcmp(name, "motor_fast")) {
       setMotorFast(value > 0 ? (uint8_t)value : (state ? pwmFastCurrent : 0));
-    } else if (!strcmp(name, "motor_slow")) {
+    }
+    else if (!strcmp(name, "motor_slow")) {
       setMotorSlow(value > 0 ? (uint8_t)value : (state ? pwmSlowCurrent : 0));
-    } else if (!strcmp(name, "relay1")) {
+    }
+    else if (!strcmp(name, "relay1")) {
       setRelay(PIN_RELAIS1, "relay1", state ? 1 : 0);
-    } else if (!strcmp(name, "relay2")) {
+    }
+    else if (!strcmp(name, "relay2")) {
       setRelay(PIN_RELAIS2, "relay2", state ? 1 : 0);
-    } else if (!strcmp(name, "led")) {
+    }
+    else if (!strcmp(name, "led")) {
       digitalWrite(PIN_LED, state ? HIGH : LOW);
       emitActuator("led", state ? 1 : 0, state ? 1 : 0);
-    } else if (!strcmp(name, "servo")) {
-      servoPulseDirect((int)value);
-    } else {
+    }
+    else if (!strcmp(name, "servo")) {
+      int pulse = constrain((int)value, POS_REST_LEFT, POS_REST_RIGHT);
+      setServoPulse(pulse);
+    }
+    else {
       emitError("ACT_UNKNOWN");
     }
     return;
@@ -600,21 +626,11 @@ void handleJsonCommand(char* line) {
   if (!strcmp(cmd, "set_config")) {
     bool b;
     long v;
-    char mode[24] = "";
 
     if (extractBoolValue(line, "auto_sort_enabled", &b)) autoSortEnabled = b;
     if (extractIntValue(line, "pwm_fast", &v)) pwmFastCurrent = constrain(v, 0, 255);
     if (extractIntValue(line, "pwm_slow", &v)) pwmSlowCurrent = constrain(v, 0, 255);
-
-    if (extractStringValue(line, "service_mode", serialBuffer, sizeof(serialBuffer))) {
-      serviceMode = !strcmp(serialBuffer, "1") || !strcmp(serialBuffer, "true");
-    } else if (extractBoolValue(line, "service_mode", &b)) {
-      serviceMode = b;
-    }
-
-    if (extractStringValue(line, "rfid_mode", mode, sizeof(mode))) {
-      currentRFIDMode = parseRFIDMode(mode);
-    }
+    if (extractBoolValue(line, "service_mode", &b)) serviceMode = b;
 
     emitMachine("config_updated");
     return;
@@ -631,6 +647,7 @@ void handleJsonCommand(char* line) {
 void handleSerial() {
   while (Serial.available()) {
     char c = Serial.read();
+
     if (c == '\n' || c == '\r') {
       if (serialPos > 0) {
         serialBuffer[serialPos] = '\0';
@@ -666,13 +683,12 @@ void setup() {
   analogWrite(PIN_MOTOR_SCHNELL, 0);
   analogWrite(PIN_MOTOR_LANGSAM, 0);
 
-  for (uint8_t i = 0; i < MAX_DUCKS; i++) clearQueueSlot(i);
+  for (uint8_t i = 0; i < MAX_DUCKS; i++) {
+    queue[i].flags = 0;
+    queue[i].uidHex[0] = '\0';
+  }
 
-  myServo.attach(PIN_SERVO);
-  myServo.write(POS_REST_LEFT);
-  delay(500);
-  myServo.detach();
-  restPositionIsLeft = true;
+  setServoPulse(POS_REST_LEFT);
 
   Wire.begin();
   Wire.beginTransmission(0x24);
@@ -692,16 +708,29 @@ void setup() {
     emitBoot("no_i2c_0x24");
   }
 
-  emitSensor("ls1", digitalRead(PIN_LS1) ? 1 : 0, "init");
-  emitSensor("ls2", digitalRead(PIN_LS2) ? 1 : 0, "init");
   stopBelts();
   emitMachine("setup_complete");
 }
 
 void loop() {
   handleSerial();
+
+  if (currentBeltState == CLEARING && millis() >= band1StopTime) {
+    analogWrite(PIN_MOTOR_SCHNELL, 0);
+    currentBeltState = STOPPED;
+    pauseStartTime = millis();
+    emitActuator("motor_fast", 0, 0);
+    emitMachine("clearing_complete_stopped");
+  }
+
   checkLS1();
+  if (nfcAktiv) checkRFID();
   checkLS2();
-  checkRFID();
-  cleanupQueue();
+
+  if (serviceMode || currentBeltState == RUNNING || currentBeltState == CLEARING) {
+    cleanupQueue();
+    processQueue();
+  }
+
+  handleServoStateMachine();
 }

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duck-O-Mat Media</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --header-bg: #1e1e1e;
+            --btn-bg: #2a2a2a;
+            --btn-hover: #3a3a3a;
+            --accent-color: #00d2ff;
+            --border-color: #333333;
+        }
+        [data-theme="light"] {
+            --bg-color: #f4f4f9;
+            --text-color: #333333;
+            --header-bg: #ffffff;
+            --btn-bg: #ffffff;
+            --btn-hover: #e9ecef;
+            --accent-color: #0056b3;
+            --border-color: #dddddd;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .header {
+            height: 12%;
+            background-color: var(--header-bg);
+            border-bottom: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+        }
+        .back-btn {
+            background: var(--btn-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 10px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 1.1em;
+            text-decoration: none;
+        }
+        .back-btn:hover { background: var(--btn-hover); }
+        .gallery {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+        }
+        .gallery img, .gallery video {
+            width: 100%;
+            border-radius: 12px;
+            border: 2px solid var(--border-color);
+        }
+        .media-item {
+            position: relative;
+            cursor: pointer;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid var(--border-color);
+        }
+
+        .media-item video {
+            width: 100%;
+            display: block;
+            pointer-events: none;
+        }
+
+        .play-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(0,0,0,0.7);
+        }
+
+        .video-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #000;
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .video-overlay video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a class="back-btn" href="startmenue_preview.html">← Zurück</a>
+    </div>
+    <div class="gallery" id="gallery">
+        <div class="media-item" data-src="videos/GSD_V1.mp4">
+            <video muted preload="metadata">
+                <source src="videos/GSD_V1.mp4#t=0.5" type="video/mp4">
+            </video>
+            <div class="play-icon">▶</div>
+        </div>
+    </div>
+
+    <div class="video-overlay" id="videoOverlay">
+        <video id="fullscreenVideo" loop playsinline></video>
+    </div>
+
+    <script>
+        const gallery = document.getElementById('gallery');
+        const overlay = document.getElementById('videoOverlay');
+        const fsVideo = document.getElementById('fullscreenVideo');
+
+        gallery.addEventListener('click', function(e) {
+            const item = e.target.closest('.media-item');
+            if (!item) return;
+
+            const src = item.getAttribute('data-src');
+            fsVideo.src = src;
+            overlay.style.display = 'flex';
+
+            fsVideo.play();
+
+            if (overlay.requestFullscreen) {
+                overlay.requestFullscreen();
+            } else if (overlay.webkitRequestFullscreen) {
+                overlay.webkitRequestFullscreen();
+            } else if (overlay.msRequestFullscreen) {
+                overlay.msRequestFullscreen();
+            }
+        });
+
+        document.addEventListener('fullscreenchange', exitHandler);
+        document.addEventListener('webkitfullscreenchange', exitHandler);
+        document.addEventListener('msfullscreenchange', exitHandler);
+
+        function exitHandler() {
+            const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+            if (!isFullscreen) {
+                overlay.style.display = 'none';
+                fsVideo.pause();
+                fsVideo.src = '';
+            }
+        }
+
+        overlay.addEventListener('click', function() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>

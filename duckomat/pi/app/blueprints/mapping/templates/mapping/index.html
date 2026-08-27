@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Duckomat - Mapping{% endblock %}
+{% block content %}
+<h1>UID Mapping</h1>
+
+<section class="panel">
+  <h2>Live NFC-Reader</h2>
+  <div class="box">Zuletzt gelesen<br><span id="liveUid">-</span></div>
+  <div class="box">Gemappte Enten<br><span id="mappedCount">0</span></div>
+</section>
+
+<section class="panel" id="simPanel" style="display:none;">
+  <h2>NFC simulieren (nur Entwicklermodus)</h2>
+  <div class="control-row">
+    <input type="text" id="simUid" value="AABBCC">
+    <button id="simtagBtn">SIMTAG senden</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Bandgeschwindigkeiten</h2>
+  <div class="control-row">
+    <label>Schnelles Band: <span id="fastval">0</span></label>
+    <input type="range" id="fastSlider" min="0" max="255" value="0">
+  </div>
+  <div class="control-row">
+    <label>Langsames Band: <span id="slowval">0</span></label>
+    <input type="range" id="slowSlider" min="0" max="255" value="0">
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Manuelle Zuweisung</h2>
+  <div class="control-row">
+    <input type="text" id="newUid" placeholder="UID (z.B. AABBCC)">
+    <button id="useLiveUidBtn">Aktuelle UID uebernehmen</button>
+  </div>
+  <div class="control-row">
+    <input type="number" id="newNummer" placeholder="Nummer">
+    <button id="autoNumberBtn">Naechste freie Nummer</button>
+    <button id="addBtn">Zuweisen</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Vollautomatische Erstzuweisung</h2>
+  <p class="hint">Setzt das komplette Mapping zurueck und vergibt anschliessend
+     laufend aufsteigende Nummern an jede neu gescannte Ente.</p>
+  <div class="control-row">
+    <button id="autoStartBtn">Automatik starten (mit Reset)</button>
+    <button id="autoStopBtn">Automatik stoppen</button>
+  </div>
+  <p>Status: <strong id="autoState">-</strong></p>
+  <p>Zuletzt automatisch zugewiesen: <strong id="autoLast">-</strong></p>
+</section>
+
+<section class="panel">
+  <h2>Verwaltung</h2>
+  <div class="control-row">
+    <a href="/mapping/api/export_csv"><button>Export als CSV</button></a>
+    <input type="file" id="csvFile" accept=".csv">
+    <button id="importBtn">CSV importieren</button>
+  </div>
+  <div class="control-row">
+    <button id="resetAllBtn" style="background:#ffdddd;">Gesamtes Mapping zuruecksetzen</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Bestehende Zuordnungen</h2>
+  <table id="mappingTable">
+    <thead><tr><th>UID</th><th>Nummer</th><th>Erstellt</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script src="/static/mapping.js"></script>
+{% endblock %}

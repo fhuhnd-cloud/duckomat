@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Duckomat - Hardware{% endblock %}
+{% block content %}
+<h1>Hardware Test & Debug</h1>
+
+<section class="panel">
+  <h2>Zaehler</h2>
+  <div class="box">Links<br><span id="left">0</span></div>
+  <div class="box">Rechts<br><span id="right">0</span></div>
+  <div class="box">Verworfen<br><span id="rejected">0</span></div>
+  <div class="box">Verbindung<br><span id="conn">-</span></div>
+  <div class="box">NFC-Reader<br><span id="nfcReady">-</span></div>
+  <br>
+  <button onclick="fetch('/hardware/api/reset', {method:'POST'})">Zaehler zuruecksetzen</button>
+</section>
+
+<section class="panel">
+  <h2>Sensoren (Ultraschall)</h2>
+  <div class="box sensor" id="ls1box">Sensor 1 (vorne)<br><span id="ls1">-</span><br><small><span id="us1cm">-</span> cm</small></div>
+  <div class="box sensor" id="ls2box">Sensor 2 (hinten)<br><span id="ls2">-</span><br><small><span id="us2cm">-</span> cm</small></div>
+  <div class="box sensor">NFC UID (live)<br><span id="uid">-</span></div>
+  <div class="box sensor">Servo<br><span id="servostate">-</span></div>
+</section>
+
+<section class="panel">
+  <h2>Motoren (PWM 0-255)</h2>
+  <div class="control-row">
+    <button id="motorOnBtn" style="background:#27ae60;">An (255 / 130)</button>
+    <button id="motorOffBtn" style="background:#c0392b;">Aus (0 / 0)</button>
+  </div>
+  <div class="control-row">
+    <label>Schnelles Band (hinten): <span id="fastval">0</span></label>
+    <input type="range" id="fastSlider" min="0" max="255" value="0">
+  </div>
+  <div class="control-row">
+    <label>Langsames Band (vorne/Einzug): <span id="slowval">0</span></label>
+    <input type="range" id="slowSlider" min="0" max="255" value="0">
+  </div>
+  <div class="control-row">
+    <label>Gezielte Eingabe:</label>
+    <label>Schnell:</label> <input type="number" id="fastInput" min="0" max="255" style="width:70px;">
+    <label>Langsam:</label> <input type="number" id="slowInput" min="0" max="255" style="width:70px;">
+    <button id="motorInputApply">Uebernehmen</button>
+  </div>
+  <p class="hint">Im Inventur-Menue starten/stoppen die Motoren automatisch mit Start/Stop.</p>
+</section>
+
+<section class="panel">
+  <h2>Servo (Kloeppel) manuell</h2>
+  <div class="control-row">
+    <label>Winkel (Grad, 45 = Ruhe Links, 135 = Ruhe Rechts)</label>
+    <input type="number" id="servoAngle" min="0" max="180" step="0.5" value="45">
+    <button id="servoAngleApply">Position senden</button>
+  </div>
+  <p class="hint">Nur moeglich, wenn kein Kick in der Warteschlange aktiv ist.</p>
+</section>
+
+<section class="panel">
+  <h2>Entwicklermodus</h2>
+  <div class="control-row">
+    <label><input type="checkbox" id="devModeToggle"> Entwicklermodus aktivieren</label>
+  </div>
+  <p class="hint">Schaltet Simulationsfelder (auf allen drei Seiten) und die
+     folgenden Live-Tuning-Regler sichtbar.</p>
+
+  <div id="devPanel" style="display:none;">
+
+    <h3>NFC simulieren (Testmodus)</h3>
+    <div class="control-row">
+      <input type="text" id="simUid" value="AABBCC">
+      <button id="simtagBtn">SIMTAG senden</button>
+    </div>
+
+    <h3>Schnelltests</h3>
+    <div class="control-row">
+      <button id="testKickLBtn">Test-Kick Links</button>
+      <button id="testKickRBtn">Test-Kick Rechts</button>
+    </div>
+    <div class="control-row">
+      <label>NFC-Modus:</label>
+      <button id="nfcModeContBtn">CONTINUOUS</button>
+      <button id="nfcModeDuckBtn">DUCKONLY</button>
+      <span>Aktuell: <strong id="nfcModeDisplay">-</strong></span>
+    </div>
+
+    <h3>Live-Tuning</h3>
+    <p class="hint">Jeder Regler sendet seinen Wert einzeln und automatisch.
+       Klammer = Name der Konstante/des CONFIG-Schluessels in duck_sorter.ino,
+       falls du den ermittelten Wert spaeter fest uebernehmen willst.</p>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>Aktueller Wert</th><th>Neuer Wert</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Servo Ruhe Links (g_posRestLeft / POSRESTL)</td>
+          <td><span id="cur_posrestl">-</span> us (<span id="ang_posrestl">-</span>&deg;)</td>
+          <td><input type="number" class="tune" data-key="POSRESTL" id="in_posrestl" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Servo Kick Links (g_posKickLeft / POSKICKL)</td>
+          <td><span id="cur_poskickl">-</span> us (<span id="ang_poskickl">-</span>&deg;)</td>
+          <td><input type="number" class="tune" data-key="POSKICKL" id="in_poskickl" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Servo Kick Rechts (g_posKickRight / POSKICKR)</td>
+          <td><span id="cur_poskickr">-</span> us (<span id="ang_poskickr">-</span>&deg;)</td>
+          <td><input type="number" class="tune" data-key="POSKICKR" id="in_poskickr" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Servo Ruhe Rechts (g_posRestRight / POSRESTR)</td>
+          <td><span id="cur_posrestr">-</span> us (<span id="ang_posrestr">-</span>&deg;)</td>
+          <td><input type="number" class="tune" data-key="POSRESTR" id="in_posrestr" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Kloeppel-Delay: LS2 bis Kick (g_kloeppelDelay / KDELAY), ms</td>
+          <td><span id="cur_kdelay">-</span></td>
+          <td><input type="number" class="tune" data-key="KDELAY" id="in_kdelay" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Kick-Halten (g_kickHoldMs / KHOLD), ms</td>
+          <td><span id="cur_khold">-</span></td>
+          <td><input type="number" class="tune" data-key="KHOLD" id="in_khold" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Rueckkehr-Halten normal (g_returnHoldMs / RHOLD), ms</td>
+          <td><span id="cur_rhold">-</span></td>
+          <td><input type="number" class="tune" data-key="RHOLD" id="in_rhold" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Rueckkehr-Halten bei Seitenwechsel (g_returnWechselMs / RHOLDSW), ms</td>
+          <td><span id="cur_rholdswitch">-</span></td>
+          <td><input type="number" class="tune" data-key="RHOLDSW" id="in_rholdswitch" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Ultraschall Blockiert-Schwelle (g_usThresholdMm / USTHRESHMM), mm</td>
+          <td><span id="cur_usthreshmm">-</span></td>
+          <td><input type="number" class="tune" data-key="USTHRESHMM" id="in_usthreshmm" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Ultraschall Bestaetigungen Duck-Logik (g_usConfirmCount / USCONFIRM)</td>
+          <td><span id="cur_usconfirm">-</span></td>
+          <td><input type="number" class="tune" data-key="USCONFIRM" id="in_usconfirm" style="width:80px;"></td>
+        </tr>
+        <tr>
+          <td>Ultraschall Messintervall (g_usIntervalMs / USINTERVAL), ms</td>
+          <td><span id="cur_usinterval">-</span></td>
+          <td><input type="number" class="tune" data-key="USINTERVAL" id="in_usinterval" style="width:80px;"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="control-row">
+      <label><input type="checkbox" id="cfg_invert"> Lesbar/Unlesbar-Logik invertieren (Debug)</label>
+    </div>
+    <div class="control-row">
+      <label>Kistengroesse (Enten pro Seitenwechsel)</label>
+      <input type="number" id="cfg_batchsize" min="1" style="width:100px;" value="100">
+      <button id="batchSizeApply">Uebernehmen</button>
+    </div>
+    <div class="control-row">
+      <button id="cfgRefreshBtn">Aktuelle Werte vom Nano neu laden</button>
+    </div>
+
+    <h3>Rohes Serial-Log (letzte Zeilen vom Nano)</h3>
+    <pre id="rawLog" style="background:#222; color:#0f0; padding:10px; height:150px; overflow-y:scroll; font-size:0.75em;"></pre>
+  </div>
+</section>
+
+<script src="/static/hardware.js"></script>
+{% endblock %}

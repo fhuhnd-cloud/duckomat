@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Duckomat - Inventur{% endblock %}
+{% block content %}
+<h1>Inventur / Sortierung</h1>
+
+<section class="panel">
+  <h2>Vor dem Start</h2>
+  <div class="control-row">
+    <label>Erste Sortierrichtung:</label>
+    <label><input type="radio" name="startDir" value="LEFT" checked> Links</label>
+    <label><input type="radio" name="startDir" value="RIGHT"> Rechts</label>
+  </div>
+  <p class="hint">Der Klöppel faehrt beim Start automatisch auf die Ruheposition
+     DERSELBEN Seite wie die gewaehlte Startrichtung (z.B. bei "Links" auf Ruhe Links).</p>
+</section>
+
+<section class="panel">
+  <h2>Steuerung</h2>
+  <div class="control-row">
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+    <button id="resetBtn">Session zuruecksetzen</button>
+  </div>
+  <p>Status: <strong id="runningState">-</strong></p>
+  <p>Aktuelle Auswurf-Seite: <strong id="direction">-</strong> (Kiste: <span id="batch">0</span> / <span id="batchSize">100</span> - kann jederzeit gewechselt werden)</p>
+  <p>NFC-Reader: <strong id="nfcReady">-</strong> &nbsp; Verbindung: <strong id="conn">-</strong></p>
+  <p class="hint">Start/Stop steuern die Foerderbaender automatisch: Start = 255/130, Stop = 0/0.</p>
+</section>
+
+<section class="panel">
+  <h2>Förderbänder (manuelle Feinjustierung)</h2>
+  <div class="control-row">
+    <button id="motorOnBtn" style="background:#27ae60;">An (255 / 130)</button>
+    <button id="motorOffBtn" style="background:#c0392b;">Aus (0 / 0)</button>
+  </div>
+  <div class="control-row">
+    <label>Schnelles Band: <span id="fastval">0</span></label>
+    <input type="range" id="fastSlider" min="0" max="255" value="0">
+  </div>
+  <div class="control-row">
+    <label>Langsames Band: <span id="slowval">0</span></label>
+    <input type="range" id="slowSlider" min="0" max="255" value="0">
+  </div>
+  <div class="control-row">
+    <label>Gezielte Eingabe:</label>
+    <label>Schnell:</label> <input type="number" id="fastInput" min="0" max="255" style="width:70px;">
+    <label>Langsam:</label> <input type="number" id="slowInput" min="0" max="255" style="width:70px;">
+    <button id="motorInputApply">Uebernehmen</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Automatischer Bandstopp bei unlesbaren Enten</h2>
+  <div class="control-row">
+    <label><input type="checkbox" id="stopOnRejectsCheck"> Band anhalten, sobald so viele Enten durchgelassen wurden:</label>
+    <input type="number" id="rejectStopSizeInput" min="1" style="width:80px;" value="100">
+    <button id="rejectStopSizeApply">Uebernehmen</button>
+  </div>
+  <p>Durchgelassen seit letztem Stopp: <span id="rejectBatchCount">0</span> / <span id="rejectStopSize">100</span></p>
+  <div id="rejectPausePanel" style="display:none; background:#fff3cd; padding:10px; border-radius:8px;">
+    <p><strong>Grenze erreicht - Baender werden angehalten</strong> (vorderes Band sofort, hinteres nach 2s Nachlauf).</p>
+    <button id="resumeRejectsBtn">Weiter (Zaehler zuruecksetzen, Motoren manuell neu starten)</button>
+  </div>
+</section>
+
+<section class="panel" id="simPanel" style="display:none;">
+  <h2>NFC simulieren (nur Entwicklermodus)</h2>
+  <div class="control-row">
+    <input type="text" id="simUid" value="AABBCC">
+    <button id="simtagBtn">SIMTAG senden</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Session-Zaehler</h2>
+  <div class="box">Links<br><span id="sLeft">0</span></div>
+  <div class="box">Rechts<br><span id="sRight">0</span></div>
+  <div class="box">Verworfen<br><span id="sRejected">0</span></div>
+</section>
+
+<section class="panel">
+  <h2>Letzte sortierte Enten</h2>
+  <table id="logTable">
+    <thead><tr><th>Zeit</th><th>UID</th><th>Nummer</th><th>Seite</th><th>Ergebnis</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script src="/static/inventur.js"></script>
+{% endblock %}

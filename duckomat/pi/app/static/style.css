@@ -1,3 +1,4 @@
+/* ===== Bestehende Basis-Styles (unverändert) ===== */
 body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; color: #222; }
 .topnav { background: #2c3e50; padding: 12px 20px; }
 .topnav a { color: white; text-decoration: none; margin-right: 20px; font-weight: bold; }
@@ -17,3 +18,178 @@ button { background: #2980b9; color: white; border: none; border-radius: 6px; pa
 button:hover { background: #1f618d; }
 input[type="text"], input[type="number"] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
 .hint { color: #7f8c8d; font-size: 0.85em; }
+
+/* ===== NEU: Theme-Variablen und gemeinsamer Header ===== */
+:root {
+  --bg-color: #121212;
+  --text-color: #ffffff;
+  --header-bg: #1e1e1e;
+  --btn-bg: #2a2a2a;
+  --btn-hover: #3a3a3a;
+  --accent-color: #00d2ff;
+  --border-color: #333333;
+  --panel-bg: #1e1e1e;
+}
+[data-theme="light"] {
+  --bg-color: #f4f4f9;
+  --text-color: #333333;
+  --header-bg: #ffffff;
+  --btn-bg: #ffffff;
+  --btn-hover: #e9ecef;
+  --accent-color: #0056b3;
+  --border-color: #dddddd;
+  --panel-bg: #ffffff;
+}
+
+html, body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.site-header {
+  height: 90px;
+  background-color: var(--header-bg);
+  border-bottom: 2px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+}
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 100%;
+}
+.logo-img {
+  height: 60px;
+  max-width: 140px;
+  object-fit: contain;
+}
+.logo-rotary {
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+[data-theme="dark"] .logo-rotary {
+  background: transparent;
+  padding: 0;
+}
+.header-controls {
+  display: flex;
+  gap: 15px;
+}
+.control-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  background-color: var(--btn-bg);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.control-btn:hover { background-color: var(--btn-hover); transform: scale(1.05); }
+.control-btn svg { width: 24px; height: 24px; fill: var(--text-color); }
+
+[data-theme="dark"] .panel { background: var(--panel-bg); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+[data-theme="dark"] .panel h2 { color: var(--accent-color); }
+[data-theme="dark"] h1, [data-theme="dark"] h3 { color: var(--text-color); }
+[data-theme="dark"] table { color: var(--text-color); }
+[data-theme="dark"] th, [data-theme="dark"] td { border-bottom: 1px solid var(--border-color); }
+[data-theme="dark"] .box { background: var(--btn-bg); }
+[data-theme="dark"] input[type="text"], [data-theme="dark"] input[type="number"] {
+  background: var(--btn-bg); color: var(--text-color); border-color: var(--border-color);
+}
+
+/* ===== NEU: Startseite mit 4 Kacheln ===== */
+.main-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+  padding: 10px 0 30px;
+}
+.menu-tile {
+  background-color: var(--panel-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text-color);
+  padding: 40px 20px;
+  transition: all 0.2s;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+}
+.menu-tile:hover {
+  background-color: var(--btn-hover);
+  border-color: var(--accent-color);
+  transform: translateY(-4px);
+}
+.menu-icon {
+  width: 64px;
+  height: 64px;
+  fill: var(--accent-color);
+  margin-bottom: 14px;
+}
+.menu-title {
+  font-size: 1.3rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ===== NEU: Media-Galerie ===== */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+.media-item {
+  position: relative;
+  cursor: pointer;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--border-color);
+}
+.media-item video, .media-item img {
+  width: 100%;
+  display: block;
+  pointer-events: none;
+}
+.play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 3em;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(0,0,0,0.7);
+}
+.video-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: #000;
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+.video-overlay video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.empty-gallery-hint {
+  color: #888;
+  padding: 20px 0;
+}

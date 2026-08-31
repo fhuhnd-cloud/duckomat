@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Duckomat – Media{% endblock %}
+{% block content %}
+<h1>Media</h1>
+<div class="gallery" id="gallery">
+  {% for item in items %}
+    {% if item.type == "video" %}
+    <div class="media-item" data-src="{{ item.src }}">
+      <video muted preload="metadata">
+        <source src="{{ item.src }}#t=0.5" type="video/mp4">
+      </video>
+      <div class="play-icon">&#9658;</div>
+    </div>
+    {% elif item.type == "image" %}
+    <div class="media-item" data-src="{{ item.src }}" data-type="image">
+      <img src="{{ item.src }}" alt="Duckomat Foto">
+    </div>
+    {% endif %}
+  {% else %}
+    <p class="empty-gallery-hint">Noch keine Medien vorhanden.</p>
+  {% endfor %}
+</div>
+
+<div class="video-overlay" id="videoOverlay">
+  <video id="fullscreenVideo" loop playsinline></video>
+</div>
+
+<script src="/static/media.js"></script>
+{% endblock %}

@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask
+from flask import Flask, render_template
 import config
 from core import DuckController
 from blueprints.hardware import hardware_bp
@@ -7,6 +7,7 @@ from blueprints.mapping import mapping_bp
 from blueprints.mapping.logic import AutoAssigner
 from blueprints.inventur import inventur_bp
 from blueprints.inventur.logic import SortingSession
+from blueprints.media import media_bp
 
 app = Flask(__name__)
 
@@ -18,11 +19,13 @@ app.auto_assigner = AutoAssigner(app.duck_controller)
 app.register_blueprint(hardware_bp)
 app.register_blueprint(mapping_bp)
 app.register_blueprint(inventur_bp)
+app.register_blueprint(media_bp)
+
 
 @app.route("/")
 def root():
-    from flask import redirect
-    return redirect("/hardware/")
+    return render_template("index.html")
+
 
 if __name__ == "__main__":
     app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)

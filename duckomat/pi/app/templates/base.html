@@ -1,18 +1,43 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="dark">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Duckomat{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem("duckomat-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    })();
+  </script>
 </head>
 <body>
-  <nav class="topnav">
-    <a href="/hardware/">Hardware</a>
-    <a href="/mapping/">Mapping</a>
-    <a href="/inventur/">Inventur</a>
-  </nav>
+  <header class="site-header">
+    <div class="logo-row">
+      <img class="logo-img" src="/static/assets/logos/tuhh.png" alt="TUHH Logo">
+      <img class="logo-img" src="/static/assets/logos/isem.png" alt="ISEM Logo">
+      <img class="logo-img" src="/static/assets/logos/odce.png" alt="ODCE Logo">
+      <img class="logo-img logo-rotary" src="/static/assets/logos/rotary-club-harburg.png" alt="Rotary Club Hamburg-Harburg Logo">
+    </div>
+    <div class="header-controls">
+      <button class="control-btn" onclick="toggleTheme()" title="Theme wechseln">
+        <svg id="theme-icon" viewBox="0 0 24 24">
+          <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+        </svg>
+      </button>
+      <a class="control-btn" href="/" title="Startseite">
+        <svg viewBox="0 0 24 24">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+        </svg>
+      </a>
+    </div>
+  </header>
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>

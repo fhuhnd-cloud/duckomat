@@ -1,5 +1,4 @@
 from flask import Blueprint, render_template, jsonify, request, current_app
-from core import angle_to_us
 
 hardware_bp = Blueprint("hardware", __name__, url_prefix="/hardware", template_folder="templates")
 
@@ -28,14 +27,11 @@ def motor():
     current_app.sorting_session.note_current_pwm(fast, slow)
     return jsonify({"ok": True})
 
-@hardware_bp.route("/api/servo_angle", methods=["POST"])
-def servo_angle():
+@hardware_bp.route("/api/servo_us", methods=["POST"])
+def servo_us():
     data = request.get_json(force=True)
-    angle = float(data.get("angle"))
-    cfg = controller().get_state().get("cfg") or {}
-    us_left = cfg.get("posrestl", 990)
-    us_right = cfg.get("posrestr", 2030)
-    us = angle_to_us(angle, us_left, us_right)
+    us = int(data.get("us", 1510))
+    us = max(750, min(2250, us))
     controller().send_servo_us(us)
     return jsonify({"ok": True, "us": us})
 
@@ -46,7 +42,7 @@ def simtag():
     return jsonify({"ok": ok})
 
 ALLOWED_CONFIG_KEYS = {
-    "POSRESTL", "POSKICKL", "POSKICKR", "POSRESTR",
+    "POSRESTL", "POSMID", "POSRESTR",
     "KDELAY", "KHOLD", "RHOLD", "RHOLDSW", "INVERT",
     "USTHRESHMM", "USCONFIRM", "USINTERVAL",
     "NFCTIMEOUT", "NFCRETRIES"

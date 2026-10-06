@@ -3,21 +3,40 @@
 
 #include <Arduino.h>
 
+enum NfcMode {
+  NFC_MODE_CONTINUOUS,
+  NFC_MODE_DUCKONLY
+};
+
+enum ServoActionState {
+  SERVO_IDLE,
+  SERVO_HIT,
+  SERVO_RETURN
+};
+
+enum DuckResult {
+  RES_KICK_L,
+  RES_KICK_R,
+  RES_QUEUE_FULL,
+  RES_UNARMED,
+  RES_UNREADABLE
+};
+
 struct UsStatus {
-  bool stableBlocked;
-  bool candidateBlocked;
-  uint8_t candidateCount;
-  bool hasCandidate;
+  bool blocked;
+  bool valid;
+  uint8_t confirmCounter;
   bool rawBlocked;
+  bool anomalyNoEcho;
 };
 
 struct DuckCtx {
   bool active;
   uint32_t seq;
-  unsigned long startMs;
-  unsigned long ls2Ms;
-  bool uidValid;
-  char uidHex[24];
+  unsigned long startTimeMs;
+  unsigned long us2TimeMs;
+  bool nfcFound;
+  char uid[25];
 };
 
 struct KickJob {
@@ -25,11 +44,7 @@ struct KickJob {
   char side;
   uint32_t seq;
   unsigned long dueMs;
-  bool isSwitch;  // NEU: true = letzter Kick vor Seitenwechsel -> kuerzere Rueckkehrzeit
+  bool isSwitch;
 };
 
-enum ServoActionState { SERVO_IDLE, SERVO_HIT, SERVO_RETURN };
-enum DuckResult { RES_KICK_L, RES_KICK_R, RES_QUEUE_FULL, RES_UNARMED, RES_UNREADABLE };
-enum NfcMode { NFC_MODE_CONTINUOUS, NFC_MODE_DUCKONLY };
-
-#endif
+#endif // DUCK_TYPES_H

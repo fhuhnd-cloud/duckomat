@@ -46,13 +46,13 @@
 </section>
 
 <section class="panel">
-  <h2>Servo (Kloeppel) manuell</h2>
+  <h2>Servo (Kloeppel) manuell nach Winkel</h2>
   <div class="control-row">
-    <label>Winkel (Grad, 45 = Ruhe Links, 135 = Ruhe Rechts)</label>
-    <input type="number" id="servoAngle" min="0" max="180" step="0.5" value="45">
-    <button id="servoAngleApply">Position senden</button>
+    <label>Winkel (&deg;):</label>
+    <input type="number" id="servoAngle" min="0" max="180" step="0.5" value="45" style="width:80px;">
+    <button id="servoAngleApply">Winkel anfahren</button>
   </div>
-  <p class="hint">Nur moeglich, wenn kein Kick in der Warteschlange aktiv ist.</p>
+  <p class="hint">Wird ueber das 3-Punkt-Mapping (45&deg;, 90&deg;, 135&deg;) exakt umgerechnet.</p>
 </section>
 
 <section class="panel">
@@ -60,10 +60,23 @@
   <div class="control-row">
     <label><input type="checkbox" id="devModeToggle"> Entwicklermodus aktivieren</label>
   </div>
-  <p class="hint">Schaltet Simulationsfelder (auf allen drei Seiten) und die
-     folgenden Live-Tuning-Regler sichtbar.</p>
+  <p class="hint">Schaltet Simulationsfelder, Direkt-PWM und Kalibrier-Tuning sichtbar.</p>
 
   <div id="devPanel" style="display:none;">
+
+    <h3>Servo PWM-Direkteingabe (&micro;s Feintuning)</h3>
+    <div class="control-row" style="gap:8px;">
+      <label>Pulsbreite:</label>
+      <input type="number" id="servoDirectUs" min="750" max="2250" step="1" value="1510" style="width:95px; font-weight:bold; font-size:1.1em; text-align:center;">
+      <span>&micro;s</span>
+      <span style="color:#7f8c8d;">(&asymp; <strong id="servoDirectAngleCalc">90.0</strong>&deg;)</span>
+
+      <button type="button" class="btn-step" data-step="-10" style="background:#57606f; padding:6px 10px;">-10</button>
+      <button type="button" class="btn-step" data-step="-1" style="background:#57606f; padding:6px 10px;">-1</button>
+      <button type="button" class="btn-step" data-step="1" style="background:#57606f; padding:6px 10px;">+1</button>
+      <button type="button" class="btn-step" data-step="10" style="background:#57606f; padding:6px 10px;">+10</button>
+    </div>
+    <p class="hint">Sendet Eingaben automatisch nach 400ms Tipp-Pause. Die Schritt-Schaltfl&auml;chen senden sofort.</p>
 
     <h3>NFC simulieren (Testmodus)</h3>
     <div class="control-row">
@@ -73,8 +86,8 @@
 
     <h3>Schnelltests</h3>
     <div class="control-row">
-      <button id="testKickLBtn">Test-Kick Links</button>
-      <button id="testKickRBtn">Test-Kick Rechts</button>
+      <button id="testKickLBtn">Test-Kick Links (105&deg;)</button>
+      <button id="testKickRBtn">Test-Kick Rechts (75&deg;)</button>
     </div>
     <div class="control-row">
       <label>NFC-Modus:</label>
@@ -83,68 +96,69 @@
       <span>Aktuell: <strong id="nfcModeDisplay">-</strong></span>
     </div>
 
-    <h3>Live-Tuning</h3>
-    <p class="hint">Jeder Regler sendet seinen Wert einzeln und automatisch.
-       Klammer = Name der Konstante/des CONFIG-Schluessels in duck_sorter.ino,
-       falls du den ermittelten Wert spaeter fest uebernehmen willst.</p>
+    <h3>Winkel-Kalibrierung (3-Punkt-Basis) & Live-Tuning</h3>
+    <p class="hint">Trage hier die exakt ausgemessenen Werte f&uuml;r 45&deg;, 90&deg; und 135&deg; ein. Die Kick-Positionen f&uuml;r 75&deg; und 105&deg; werden daraus automatisch berechnet.</p>
 
     <table>
       <thead><tr><th>Parameter</th><th>Aktueller Wert</th><th>Neuer Wert</th></tr></thead>
       <tbody>
         <tr>
-          <td>Servo Ruhe Links (g_posRestLeft / POSRESTL)</td>
-          <td><span id="cur_posrestl">-</span> us (<span id="ang_posrestl">-</span>&deg;)</td>
-          <td><input type="number" class="tune" data-key="POSRESTL" id="in_posrestl" style="width:80px;"></td>
+          <td><strong>Servo Ruhe Links (POSRESTL, 45&deg;)</strong></td>
+          <td><span id="cur_posrestl">-</span> &micro;s</td>
+          <td><input type="number" class="tune" data-key="POSRESTL" id="in_posrestl" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Servo Kick Links (g_posKickLeft / POSKICKL)</td>
-          <td><span id="cur_poskickl">-</span> us (<span id="ang_poskickl">-</span>&deg;)</td>
-          <td><input type="number" class="tune" data-key="POSKICKL" id="in_poskickl" style="width:80px;"></td>
+          <td><strong>Servo Mitte / Neutral (POSMID, 90&deg;)</strong></td>
+          <td><span id="cur_posmid">-</span> &micro;s</td>
+          <td><input type="number" class="tune" data-key="POSMID" id="in_posmid" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Servo Kick Rechts (g_posKickRight / POSKICKR)</td>
-          <td><span id="cur_poskickr">-</span> us (<span id="ang_poskickr">-</span>&deg;)</td>
-          <td><input type="number" class="tune" data-key="POSKICKR" id="in_poskickr" style="width:80px;"></td>
+          <td><strong>Servo Ruhe Rechts (POSRESTR, 135&deg;)</strong></td>
+          <td><span id="cur_posrestr">-</span> &micro;s</td>
+          <td><input type="number" class="tune" data-key="POSRESTR" id="in_posrestr" style="width:85px;"></td>
+        </tr>
+        <tr style="color:#7f8c8d; font-size:0.9em; background:#f9f9f9;">
+          <td><em>Berechneter Kick Rechts (75&deg;)</em></td>
+          <td colspan="2"><span id="calc_poskickr">-</span> &micro;s</td>
+        </tr>
+        <tr style="color:#7f8c8d; font-size:0.9em; background:#f9f9f9;">
+          <td><em>Berechneter Kick Links (105&deg;)</em></td>
+          <td colspan="2"><span id="calc_poskickl">-</span> &micro;s</td>
         </tr>
         <tr>
-          <td>Servo Ruhe Rechts (g_posRestRight / POSRESTR)</td>
-          <td><span id="cur_posrestr">-</span> us (<span id="ang_posrestr">-</span>&deg;)</td>
-          <td><input type="number" class="tune" data-key="POSRESTR" id="in_posrestr" style="width:80px;"></td>
-        </tr>
-        <tr>
-          <td>Kloeppel-Delay: LS2 bis Kick (g_kloeppelDelay / KDELAY), ms</td>
+          <td>Kloeppel-Delay: LS2 bis Kick (KDELAY), ms</td>
           <td><span id="cur_kdelay">-</span></td>
-          <td><input type="number" class="tune" data-key="KDELAY" id="in_kdelay" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="KDELAY" id="in_kdelay" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Kick-Halten (g_kickHoldMs / KHOLD), ms</td>
+          <td>Kick-Halten (KHOLD), ms</td>
           <td><span id="cur_khold">-</span></td>
-          <td><input type="number" class="tune" data-key="KHOLD" id="in_khold" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="KHOLD" id="in_khold" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Rueckkehr-Halten normal (g_returnHoldMs / RHOLD), ms</td>
+          <td>Rueckkehr-Halten normal (RHOLD), ms</td>
           <td><span id="cur_rhold">-</span></td>
-          <td><input type="number" class="tune" data-key="RHOLD" id="in_rhold" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="RHOLD" id="in_rhold" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Rueckkehr-Halten bei Seitenwechsel (g_returnWechselMs / RHOLDSW), ms</td>
+          <td>Rueckkehr-Halten bei Seitenwechsel (RHOLDSW), ms</td>
           <td><span id="cur_rholdswitch">-</span></td>
-          <td><input type="number" class="tune" data-key="RHOLDSW" id="in_rholdswitch" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="RHOLDSW" id="in_rholdswitch" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Ultraschall Blockiert-Schwelle (g_usThresholdMm / USTHRESHMM), mm</td>
+          <td>Ultraschall Blockiert-Schwelle (USTHRESHMM), mm</td>
           <td><span id="cur_usthreshmm">-</span></td>
-          <td><input type="number" class="tune" data-key="USTHRESHMM" id="in_usthreshmm" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="USTHRESHMM" id="in_usthreshmm" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Ultraschall Bestaetigungen Duck-Logik (g_usConfirmCount / USCONFIRM)</td>
+          <td>Ultraschall Bestaetigungen Duck-Logik (USCONFIRM)</td>
           <td><span id="cur_usconfirm">-</span></td>
-          <td><input type="number" class="tune" data-key="USCONFIRM" id="in_usconfirm" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="USCONFIRM" id="in_usconfirm" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Ultraschall Messintervall (g_usIntervalMs / USINTERVAL), ms</td>
+          <td>Ultraschall Messintervall (USINTERVAL), ms</td>
           <td><span id="cur_usinterval">-</span></td>
-          <td><input type="number" class="tune" data-key="USINTERVAL" id="in_usinterval" style="width:80px;"></td>
+          <td><input type="number" class="tune" data-key="USINTERVAL" id="in_usinterval" style="width:85px;"></td>
         </tr>
       </tbody>
     </table>

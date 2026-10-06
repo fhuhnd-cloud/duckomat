@@ -2,52 +2,20 @@
 #include <Wire.h>
 #include <Adafruit_PN532.h>
 #include <ServoTimer2.h>
-#include <avr/wdt.h>
 #include "duck_types.h"
 
 // ============================================================
-// Duckomat Nano-Firmware (fw=24)
+// Duckomat Nano-Firmware (fw=28.8)
 //
-// KRITISCHER FIX ggue. fw=23: nfc.readPassiveTargetID() war ein
-// BLOCKIERENDER Aufruf (bis zu g_nfcTimeoutMs=60ms Stillstand der
-// gesamten loop()). Waehrend dieser Zeit wurden weder US-Sensoren
-// abgetastet noch eingehende Serial-Befehle (ARM!) verarbeitet. Bei dicht
-// folgenden Enten fuehrte das zu (a) verpassten LS1/LS2-Flanken und (b)
-// zu spaet verarbeiteten ARM-Kommandos -> VALID_UNARMED_DROP.
-//
-// LOESUNG: Non-blocking NFC-Polling ueber den IRQ-Pin (PN532_IRQ=8).
-// startPassiveTargetIDDetection() stoesst die Erkennung an, danach wird
-// in JEDEM loop()-Durchlauf nur per digitalRead(IRQ) geprueft, ob ein Tag
-// bereitsteht (readDetectedPassiveTargetID() dann nahezu instantan). Kein
-// blockierender Wartezyklus mehr in der Hauptschleife.
-//
-// ZUSATZ: LS1/LS2-Sensorereignisse werden jetzt nur noch bei tatsaechlicher
-// Zustandsaenderung gesendet (Edge-Trigger), nicht mehr bei jeder einzelnen
-// Messung - reduziert die serielle Last und gibt ARM-Kommandos vom Pi
-// weniger Konkurrenz auf der Leitung.
-//
-// FRUEHERE MEILENSTEINE (fw=21..23), zur Erinnerung fuer den naechsten Chat:
-// - fw=21: UID-Uebertragung von Hex auf Dezimalformat umgestellt, damit sie
-//   mit einem baugleichen Kaufscanner uebereinstimmt (uidToDecimal()).
-// - fw=22: Anpassung an neu installierte US-Sensor-Schirme (Timeout,
-//   Blindbereich-Handling, LONG_BLOCK_SUSPECTED-Diagnose).
-// - fw=23: "Kein Echo" wieder als UNGUELTIG behandelt (nicht als
-//   BLOCKIERT), da Schirme konstruktiv <2cm unmoeglich machen;
-//   SENSOR_ANOMALY_NOECHO-Diagnosemeldung ergaenzt; Echo-Timeout auf
-//   4500us korrigiert (war mit 2500us zu knapp und lieferte dauerhaft -1).
+// KALIBRIERTE BASISWERTE:
+// 1. POSRESTL = 2122 µs (45° Ruhe Links)
+// 2. POSMID   = 1600 µs (90° Neutral)
+// 3. POSRESTR = 1050 µs (135° Ruhe Rechts)
+// 4. Automatisch berechnet:
+//    - Kick Rechts (75°) = 1774 µs
+//    - Kick Links (105°) = 1417 µs
+// 5. Freigegebene Schutzgrenzen: 750 µs - 2250 µs (MASTER Digital DS6030 TG)
 // ============================================================
-
-uint8_t mcusr_mirror __attribute__((section(".noinit")));
-
-void get_mcusr(void) \
-  __attribute__((naked)) \
-  __attribute__((used)) \
-  __attribute__((section(".init3")));
-void get_mcusr(void) {
-  mcusr_mirror = MCUSR;
-  MCUSR = 0;
-  wdt_disable();
-}
 
 // -------------------- Pins --------------------
 #define PIN_US1_TRIG 11
@@ -56,45 +24,51 @@ void get_mcusr(void) {
 #define PIN_US2_ECHO 2
 #define PIN_SERVO 5
 #define PIN_LED 6
-#define PN532_RESET 7
-#define PN532_IRQ 8
-#define PIN_MOTOR_SCHNELL 10
-#define PIN_MOTOR_LANGSAM 9
+#define PN532_RESET 7  // Dummy-Pin (physisch nicht verbunden)
+#define PN532_IRQ 8    // Dummy-Pin (physisch nicht verbunden)
+
+#define PIN_MOTOR_SCHNELL 9
+#define PIN_MOTOR_LANGSAM 10
 
 #define I2C_SDA_PIN A4
 #define I2C_SCL_PIN A5
 
-// -------------------- Config --------------------
+// -------------------- Kalibrierte Parameter --------------------
 const bool TEST_MODE = false;
 
-const int SERVO_SAFE_MIN = 990;
-const int SERVO_SAFE_MAX = 2060;
-const unsigned long SERVO_DETACH_DELAY_MS = 5000;
+const int SERVO_SAFE_MIN = 750;
+const int SERVO_SAFE_MAX = 2250;
+const bool SERVO_AUTO_DETACH_ENABLED = true;
+const unsigned long SERVO_DETACH_DELAY_MS = 350;
 
-const unsigned long DUCK_STUCK_TIMEOUT_MS = 8000UL;
-const uint8_t WATCHDOG_TIMEOUT = WDTO_4S;
+// Die 3 gemessenen Basis-Winkel
+int g_posRestLeft = 2122;     // 45° Ruhe Links
+int g_posMid = 1600;          // 90° Mitte / Neutral
+int g_posRestRight = 1050;     // 135° Ruhe Rechts
 
-int g_posRestLeft  = 990;
-int g_posKickLeft  = 1683;
-int g_posKickRight = 1337;
-int g_posRestRight = 2030;
-unsigned long g_kloeppelDelay = 400;
-unsigned long g_kickHoldMs     = 200;
-unsigned long g_returnHoldMs   = 200;
+// Automatisch berechnete Kick-Winkel
+int g_posKickRight = 1774;    // 75° Kick Rechts
+int g_posKickLeft = 1417;     // 105° Kick Links
+
+unsigned long g_kloeppelDelay = 400;      // 400 ms Delay US2 -> Klöppel
+unsigned long g_kickHoldMs = 260;
+unsigned long g_returnHoldMs = 260;
 unsigned long g_returnWechselMs = 150;
 bool g_invertLogic = false;
 
-unsigned long g_usThresholdMm = 100;
+unsigned long g_usThresholdMm = 100;     // 100 mm = 10 cm Schwellwert
 uint8_t g_usConfirmCount = 2;
-unsigned long g_usIntervalMs = 10;
+unsigned long g_usIntervalMs = 15;
 unsigned long g_usEchoTimeoutUs = 4500UL;
 const float US_MAX_VALID_CM = 25.0;
 
 unsigned long g_maxSingleDuckBlockMs = 1200;
 
-unsigned long g_nfcTimeoutMs = 60;
+unsigned long g_nfcTimeoutMs = 35;
 uint8_t g_nfcRetries = 5;
-const unsigned long NFC_RETRY_INTERVAL_MS = 3000;
+const unsigned long NFC_IDLE_POLL_MS = 300;
+const unsigned long NFC_RETRY_INTERVAL_MS = 4000;
+const unsigned long HELLO_INTERVAL_MS = 1500;
 
 // -------------------- Servo --------------------
 ServoTimer2 kloeppel;
@@ -105,19 +79,16 @@ unsigned long servoLastDriveMs = 0;
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 bool nfcReady = false;
 unsigned long lastNfcRetryMs = 0;
+unsigned long lastNfcPollMs = 0;
 NfcMode nfcMode = NFC_MODE_CONTINUOUS;
 
-enum NfcPollState { NFC_POLL_IDLE, NFC_POLL_WAITING };
-NfcPollState nfcPollState = NFC_POLL_IDLE;
-unsigned long nfcPollStartMs = 0;
-
-// -------------------- Runtime state --------------------
+// -------------------- Runtime State --------------------
 uint8_t pwmFast = 0;
 uint8_t pwmSlow = 0;
 
 char armedSide = 'N';
 bool armedIsSwitch = false;
-char lastUid[24] = "NONE";
+char lastUid[25] = "NONE";
 
 unsigned long lastHelloMs = 0;
 
@@ -134,8 +105,6 @@ bool us2LongBlockWarned = false;
 
 unsigned long us1LastNoEchoWarnMs = 0;
 unsigned long us2LastNoEchoWarnMs = 0;
-uint32_t us1NoEchoCount = 0;
-uint32_t us2NoEchoCount = 0;
 const unsigned long NOECHO_WARN_INTERVAL_MS = 5000UL;
 
 bool us1LastSentBlocked = false;
@@ -150,7 +119,6 @@ DuckCtx duck = {false, 0, 0, 0, false, "NONE"};
 uint32_t duckSeqCounter = 0;
 
 #define KICK_QUEUE_SIZE 8
-
 KickJob kickQueue[KICK_QUEUE_SIZE];
 uint8_t qHead = 0;
 uint8_t qTail = 0;
@@ -161,6 +129,12 @@ char activeKickSide = 'N';
 uint32_t activeKickSeq = 0;
 bool activeKickIsSwitch = false;
 unsigned long servoPhaseMs = 0;
+
+// -------------------- Hilfsfunktionen --------------------
+void recalculateKickPositions() {
+  g_posKickRight = (int)(g_posRestLeft + (30.0 / 45.0) * (g_posMid - g_posRestLeft));
+  g_posKickLeft  = (int)(g_posMid + (15.0 / 45.0) * (g_posRestRight - g_posMid));
+}
 
 bool isDue(unsigned long now, unsigned long target) {
   return (long)(now - target) >= 0;
@@ -182,14 +156,94 @@ void driveServo(int us) {
 }
 
 void updateServoAutoDetach() {
+  if (!SERVO_AUTO_DETACH_ENABLED) return;
   if (!servoAttached) return;
   if (servoActionState != SERVO_IDLE) return;
   if (millis() - servoLastDriveMs >= SERVO_DETACH_DELAY_MS) {
     kloeppel.detach();
     servoAttached = false;
+    pinMode(PIN_SERVO, OUTPUT);
+    digitalWrite(PIN_SERVO, LOW);
   }
 }
 
+void uidToDecimal(const uint8_t* rawUid, uint8_t len, char* outStr) {
+  uint64_t dec = 0;
+  for (uint8_t i = 0; i < len; i++) {
+    dec = (dec << 8) | rawUid[i];
+  }
+  if (dec == 0) {
+    strcpy(outStr, "0");
+    return;
+  }
+  char rev[25];
+  uint8_t r = 0;
+  while (dec > 0) {
+    rev[r++] = '0' + (dec % 10);
+    dec /= 10;
+  }
+  uint8_t o = 0;
+  while (r > 0) {
+    outStr[o++] = rev[--r];
+  }
+  outStr[o] = '\0';
+}
+
+void clearI2CBusUnconditional() {
+  pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+  pinMode(I2C_SCL_PIN, OUTPUT);
+  delayMicroseconds(50);
+
+  for (uint8_t i = 0; i < 9; i++) {
+    digitalWrite(I2C_SCL_PIN, LOW);
+    delayMicroseconds(10);
+    digitalWrite(I2C_SCL_PIN, HIGH);
+    delayMicroseconds(10);
+  }
+
+  pinMode(I2C_SDA_PIN, OUTPUT);
+  digitalWrite(I2C_SDA_PIN, LOW);
+  delayMicroseconds(10);
+  digitalWrite(I2C_SCL_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(I2C_SDA_PIN, HIGH);
+  delayMicroseconds(10);
+
+  pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+  pinMode(I2C_SCL_PIN, INPUT_PULLUP);
+  delayMicroseconds(50);
+}
+
+bool initPN532Hardware() {
+  #if defined(WIRE_HAS_TIMEOUT)
+    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+  #endif
+
+  Wire.beginTransmission(0x24);
+  byte err = Wire.endTransmission();
+  if (err != 0) {
+    nfcReady = false;
+    return false;
+  }
+
+  nfc.begin();
+
+  #if defined(WIRE_HAS_TIMEOUT)
+    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+  #endif
+
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    nfcReady = false;
+    return false;
+  }
+
+  nfc.SAMConfig();
+  nfcReady = true;
+  return true;
+}
+
+// -------------------- Serial Protocol --------------------
 void sendAck(long token, const __FlashStringHelper* cmd) {
   Serial.print(F("ACK token=")); Serial.print(token);
   Serial.print(F(" cmd=")); Serial.println(cmd);
@@ -201,7 +255,7 @@ void sendNack(long token, const __FlashStringHelper* reason) {
 }
 
 void sendHello() {
-  Serial.print(F("HELLO fw=24 test=")); Serial.print(TEST_MODE ? 1 : 0);
+  Serial.print(F("HELLO fw=28 test=")); Serial.print(TEST_MODE ? 1 : 0);
   Serial.print(F(" nfc=")); Serial.print(nfcReady ? 1 : 0);
   Serial.print(F(" nfcmode=")); Serial.println(nfcMode == NFC_MODE_CONTINUOUS ? F("CONTINUOUS") : F("DUCKONLY"));
 }
@@ -216,8 +270,8 @@ void sendState() {
   Serial.print(F(" nfcmode=")); Serial.print(nfcMode == NFC_MODE_CONTINUOUS ? F("CONTINUOUS") : F("DUCKONLY"));
   Serial.print(F(" servo="));
   switch (servoActionState) {
-    case SERVO_IDLE:   Serial.print(F("IDLE")); break;
-    case SERVO_HIT:    Serial.print(F("HIT")); break;
+    case SERVO_IDLE: Serial.print(F("IDLE")); break;
+    case SERVO_HIT: Serial.print(F("HIT")); break;
     case SERVO_RETURN: Serial.print(F("RETURN")); break;
   }
   Serial.print(F(" lastuid=")); Serial.println(lastUid);
@@ -225,9 +279,10 @@ void sendState() {
 
 void sendCfg() {
   Serial.print(F("CFG posrestl=")); Serial.print(g_posRestLeft);
+  Serial.print(F(" posmid=")); Serial.print(g_posMid);
+  Serial.print(F(" posrestr=")); Serial.print(g_posRestRight);
   Serial.print(F(" poskickl=")); Serial.print(g_posKickLeft);
   Serial.print(F(" poskickr=")); Serial.print(g_posKickRight);
-  Serial.print(F(" posrestr=")); Serial.print(g_posRestRight);
   Serial.print(F(" kdelay=")); Serial.print(g_kloeppelDelay);
   Serial.print(F(" khold=")); Serial.print(g_kickHoldMs);
   Serial.print(F(" rhold=")); Serial.print(g_returnHoldMs);
@@ -247,18 +302,17 @@ void sendEvent(const __FlashStringHelper* type, uint32_t seq) {
   Serial.print(F(" seq=")); Serial.println(seq);
 }
 
-void sendEventDetail(const __FlashStringHelper* type, uint32_t seq, const __FlashStringHelper* detail) {
-  Serial.print(F("EV type=")); Serial.print(type);
-  Serial.print(F(" seq=")); Serial.print(seq);
-  Serial.print(F(" detail=")); Serial.println(detail);
-}
-
 void sendSensorEdge(const __FlashStringHelper* which, bool blocked, float cm) {
   Serial.print(F("EV type=")); Serial.print(which);
   Serial.print(F(" state=")); Serial.print(blocked ? F("BLOCKED") : F("FREE"));
   Serial.print(F(" cm="));
   if (cm < 0.0) Serial.println(F("-1"));
   else Serial.println(cm, 1);
+}
+
+void sendSensorInitStatus() {
+  sendSensorEdge(F("LS1"), us1Status.blocked, -1.0);
+  sendSensorEdge(F("LS2"), us2Status.blocked, -1.0);
 }
 
 void sendTagEvent(const char* uid) {
@@ -271,14 +325,15 @@ void sendDuckEvent(uint32_t seq, const char* uid, DuckResult result) {
   Serial.print(F(" uid=")); Serial.print(uid);
   Serial.print(F(" result="));
   switch (result) {
-    case RES_KICK_L:      Serial.println(F("KICK_L")); break;
-    case RES_KICK_R:       Serial.println(F("KICK_R")); break;
-    case RES_QUEUE_FULL:   Serial.println(F("VALID_QUEUE_FULL_DROP")); break;
-    case RES_UNARMED:      Serial.println(F("VALID_UNARMED_DROP")); break;
-    case RES_UNREADABLE:   Serial.println(F("UNREADABLE_DROP")); break;
+    case RES_KICK_L: Serial.println(F("KICK_L")); break;
+    case RES_KICK_R: Serial.println(F("KICK_R")); break;
+    case RES_QUEUE_FULL: Serial.println(F("VALID_QUEUE_FULL_DROP")); break;
+    case RES_UNARMED: Serial.println(F("VALID_UNARMED_DROP")); break;
+    case RES_UNREADABLE: Serial.println(F("UNREADABLE_DROP")); break;
   }
 }
 
+// -------------------- Queue & Servo Logik --------------------
 bool enqueueKick(char side, uint32_t seq, unsigned long dueMs, bool isSwitch) {
   if (qCount >= KICK_QUEUE_SIZE) return false;
   kickQueue[qTail].used = true;
@@ -299,579 +354,325 @@ bool peekKick(KickJob &job) {
 
 void popKick() {
   if (qCount == 0) return;
-  kickQueue[qHead].used = false;
   qHead = (qHead + 1) % KICK_QUEUE_SIZE;
   qCount--;
 }
 
-void updateKickExecutor() {
-  unsigned long nowMs = millis();
+void updateServo(unsigned long now) {
+  updateServoAutoDetach();
 
   if (servoActionState == SERVO_IDLE) {
     KickJob job;
-    if (peekKick(job) && isDue(nowMs, job.dueMs)) {
-      activeKickSide = job.side;
-      activeKickSeq = job.seq;
-      activeKickIsSwitch = job.isSwitch;
-      popKick();
-      driveServo(activeKickSide == 'L' ? g_posKickLeft : g_posKickRight);
-      servoActionState = SERVO_HIT;
-      servoPhaseMs = nowMs;
-      Serial.print(F("EV type=KICK_FIRE seq=")); Serial.print(activeKickSeq);
-      Serial.print(F(" side=")); Serial.println(activeKickSide);
+    if (peekKick(job)) {
+      if (isDue(now, job.dueMs)) {
+        popKick();
+        activeKickSide = job.side;
+        activeKickSeq = job.seq;
+        activeKickIsSwitch = job.isSwitch;
+
+        sendEvent(job.side == 'L' ? F("KICK_L") : F("KICK_R"), job.seq);
+
+        int targetPos = (job.side == 'L')
+          ? (g_invertLogic ? g_posKickRight : g_posKickLeft)
+          : (g_invertLogic ? g_posKickLeft : g_posKickRight);
+
+        driveServo(clampServo(targetPos));
+        servoActionState = SERVO_HIT;
+        servoPhaseMs = now + g_kickHoldMs;
+      }
     }
-  } else if (servoActionState == SERVO_HIT) {
-    if (nowMs - servoPhaseMs >= g_kickHoldMs) {
-      int returnPos;
+  }
+  else if (servoActionState == SERVO_HIT) {
+    if (isDue(now, servoPhaseMs)) {
+      int restPos;
+      unsigned long holdTime;
+
       if (activeKickIsSwitch) {
-        returnPos = (activeKickSide == 'L') ? g_posRestRight : g_posRestLeft;
+        restPos = (activeKickSide == 'L')
+          ? (g_invertLogic ? g_posRestLeft : g_posRestRight)
+          : (g_invertLogic ? g_posRestRight : g_posRestLeft);
+        holdTime = g_returnWechselMs;
       } else {
-        returnPos = (activeKickSide == 'L') ? g_posRestLeft : g_posRestRight;
+        restPos = (activeKickSide == 'L')
+          ? (g_invertLogic ? g_posRestRight : g_posRestLeft)
+          : (g_invertLogic ? g_posRestLeft : g_posRestRight);
+        holdTime = g_returnHoldMs;
       }
-      driveServo(returnPos);
+
+      driveServo(clampServo(restPos));
       servoActionState = SERVO_RETURN;
-      servoPhaseMs = nowMs;
+      servoPhaseMs = now + holdTime;
     }
-  } else if (servoActionState == SERVO_RETURN) {
-    unsigned long returnTime = activeKickIsSwitch ? g_returnWechselMs : g_returnHoldMs;
-    if (nowMs - servoPhaseMs >= returnTime) {
-      Serial.print(F("EV type=KICK_DONE seq=")); Serial.print(activeKickSeq);
-      Serial.print(F(" side=")); Serial.println(activeKickSide);
-      activeKickSide = 'N';
-      activeKickSeq = 0;
-      activeKickIsSwitch = false;
+  }
+  else if (servoActionState == SERVO_RETURN) {
+    if (isDue(now, servoPhaseMs)) {
       servoActionState = SERVO_IDLE;
+      sendEvent(F("SERVO_REST"), activeKickSeq);
     }
   }
 }
 
-void uidToDecimal(const uint8_t* uid, uint8_t uidLen, char* out, size_t outSize) {
-  uint64_t value = 0;
-  for (int i = (int)uidLen - 1; i >= 0; i--) {
-    value = (value << 8) | uid[i];
-  }
-
-  if (value == 0) {
-    if (outSize >= 2) { out[0] = '0'; out[1] = '\0'; }
-    return;
-  }
-
-  char buf[21];
-  uint8_t pos = 0;
-  while (value > 0 && pos < sizeof(buf) - 1) {
-    buf[pos++] = '0' + (char)(value % 10);
-    value /= 10;
-  }
-
-  size_t outPos = 0;
-  for (int i = (int)pos - 1; i >= 0 && outPos < outSize - 1; i--) {
-    out[outPos++] = buf[i];
-  }
-  out[outPos] = '\0';
-}
-
-void startDuck() {
-  duck.active = true;
-  duck.seq = ++duckSeqCounter;
-  duck.startMs = millis();
-  duck.ls2Ms = 0;
-  duck.uidValid = false;
-  strcpy(duck.uidHex, "NONE");
-  sendEvent(F("LS1_DUCK"), duck.seq);
-}
-
-void finishDuck() {
-  duck.ls2Ms = millis();
-  sendEvent(F("LS2_DUCK"), duck.seq);
-
-  bool treatAsValid = g_invertLogic ? !duck.uidValid : duck.uidValid;
-
-  if (treatAsValid) {
-    if (armedSide == 'L' || armedSide == 'R') {
-      bool ok = enqueueKick(armedSide, duck.seq, duck.ls2Ms + g_kloeppelDelay, armedIsSwitch);
-      char usedSide = armedSide;
-      armedSide = 'N';
-      armedIsSwitch = false;
-      if (ok) {
-        sendDuckEvent(duck.seq, duck.uidHex, usedSide == 'L' ? RES_KICK_L : RES_KICK_R);
-      } else {
-        sendDuckEvent(duck.seq, duck.uidHex, RES_QUEUE_FULL);
-      }
-    } else {
-      sendDuckEvent(duck.seq, duck.uidHex, RES_UNARMED);
-    }
-  } else {
-    sendDuckEvent(duck.seq, duck.uidValid ? duck.uidHex : "NONE", RES_UNREADABLE);
-  }
-
-  duck.active = false;
-  sendState();
-}
-
-void onLS1Falling() {
-  if (duck.active) {
-    sendEventDetail(F("ERROR"), duck.seq, F("LS1_OVERLAP"));
-    return;
-  }
-  startDuck();
-}
-
-void onLS2Falling() {
-  if (!duck.active) {
-    sendEventDetail(F("EV_IGNORED"), 0, F("LS2_WITHOUT_LS1"));
-    return;
-  }
-  finishDuck();
-}
-
-void checkDuckStuck() {
-  if (!duck.active) return;
-  if (millis() - duck.startMs < DUCK_STUCK_TIMEOUT_MS) return;
-
-  sendEventDetail(F("ERROR"), duck.seq, F("DUCK_STUCK_TIMEOUT"));
-  duck.active = false;
-  sendState();
-}
-
-float measureDistanceCm(uint8_t trigPin, uint8_t echoPin) {
+// -------------------- Sensorik (Ultraschall) --------------------
+float measureUltraschallRaw(uint8_t trigPin, uint8_t echoPin) {
   digitalWrite(trigPin, LOW);
-  delayMicroseconds(3);
+  delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  unsigned long dauer = pulseIn(echoPin, HIGH, g_usEchoTimeoutUs);
-  if (dauer == 0) return -1.0;
-  return dauer / 58.0;
+  unsigned long duration = pulseIn(echoPin, HIGH, g_usEchoTimeoutUs);
+  if (duration == 0) return -1.0;
+
+  float cm = (duration * 0.0343) / 2.0;
+  if (cm > US_MAX_VALID_CM) return -1.0;
+  return cm;
 }
 
-bool classifyReading(float cm, bool &blockedOut) {
-  if (cm < 0.0 || cm > US_MAX_VALID_CM) {
-    return false;
-  }
-  blockedOut = (cm < (g_usThresholdMm / 10.0));
-  return true;
-}
+void processUsSensor(uint8_t idx, float cm, unsigned long now) {
+  UsStatus &st = (idx == 1) ? us1Status : us2Status;
+  const __FlashStringHelper* legacyName = (idx == 1) ? F("LS1") : F("LS2");
+  const __FlashStringHelper* usName = (idx == 1) ? F("US1") : F("US2");
 
-bool updateUsStatus(UsStatus &st, bool currentBlocked, bool valid, bool &newStableBlocked) {
-  if (!valid) {
-    newStableBlocked = st.stableBlocked;
-    return false;
-  }
-
-  if (!st.hasCandidate || st.candidateBlocked != currentBlocked) {
-    st.candidateBlocked = currentBlocked;
-    st.candidateCount = 1;
-    st.hasCandidate = true;
-    newStableBlocked = st.stableBlocked;
-    return false;
-  }
-
-  if (st.candidateCount < 255) st.candidateCount++;
-
-  if (st.candidateBlocked != st.stableBlocked && st.candidateCount >= g_usConfirmCount) {
-    st.stableBlocked = st.candidateBlocked;
-    st.candidateCount = 0;
-    st.hasCandidate = false;
-    newStableBlocked = st.stableBlocked;
-    return true;
-  }
-
-  newStableBlocked = st.stableBlocked;
-  return false;
-}
-
-void trackLongBlock(const __FlashStringHelper* which, bool stableBlocked,
-                     unsigned long &blockedSinceMs, bool &warned, uint32_t seqForLog) {
-  unsigned long now = millis();
-  if (stableBlocked) {
-    if (blockedSinceMs == 0) {
-      blockedSinceMs = now;
-      warned = false;
-    } else if (!warned && (now - blockedSinceMs) > g_maxSingleDuckBlockMs) {
-      warned = true;
-      Serial.print(F("EV type=LONG_BLOCK_SUSPECTED sensor="));
-      Serial.print(which);
-      Serial.print(F(" ms="));
-      Serial.println(now - blockedSinceMs);
+  if (cm < 0.0) {
+    st.anomalyNoEcho = true;
+    unsigned long &lastWarn = (idx == 1) ? us1LastNoEchoWarnMs : us2LastNoEchoWarnMs;
+    if (now - lastWarn >= NOECHO_WARN_INTERVAL_MS) {
+      Serial.print(F("EV type=SENSOR_ANOMALY_NOECHO sensor="));
+      Serial.println(legacyName);
+      lastWarn = now;
     }
   } else {
-    blockedSinceMs = 0;
-    warned = false;
+    st.anomalyNoEcho = false;
+  }
+
+  bool rawBlock = (cm >= 0.0 && cm <= (float)(g_usThresholdMm / 10.0));
+  if (rawBlock) {
+    if (st.confirmCounter < g_usConfirmCount) st.confirmCounter++;
+  } else {
+    st.confirmCounter = 0;
+  }
+
+  bool isBlocked = (st.confirmCounter >= g_usConfirmCount);
+  st.blocked = isBlocked;
+  bool &everSent = (idx == 1) ? us1EverSent : us2EverSent;
+  bool &lastSent = (idx == 1) ? us1LastSentBlocked : us2LastSentBlocked;
+
+  if (!everSent || isBlocked != lastSent) {
+    sendSensorEdge(legacyName, isBlocked, cm);
+    sendSensorEdge(usName, isBlocked, cm);
+    
+    lastSent = isBlocked;
+    everSent = true;
+
+    if (idx == 1 && isBlocked) {
+      duck.active = true;
+      duck.seq = ++duckSeqCounter;
+      duck.startTimeMs = now;
+      duck.nfcFound = false;
+      strcpy(duck.uid, "NONE");
+      sendEvent(F("DUCK_START"), duck.seq);
+    }
+    else if (idx == 2 && isBlocked) {
+      if (duck.active) {
+        if (duck.nfcFound && strcmp(duck.uid, "NONE") != 0) {
+          if (armedSide == 'L' || armedSide == 'R') {
+            bool ok = enqueueKick(armedSide, duck.seq, now + g_kloeppelDelay, armedIsSwitch);
+            sendDuckEvent(duck.seq, duck.uid, ok ? (armedSide == 'L' ? RES_KICK_L : RES_KICK_R) : RES_QUEUE_FULL);
+          } else {
+            sendDuckEvent(duck.seq, duck.uid, RES_UNARMED);
+          }
+        } else {
+          sendDuckEvent(duck.seq, duck.uid, RES_UNREADABLE);
+        }
+        duck.active = false;
+      }
+    }
+  }
+
+  unsigned long &blockSince = (idx == 1) ? us1BlockedSinceMs : us2BlockedSinceMs;
+  bool &longWarned = (idx == 1) ? us1LongBlockWarned : us2LongBlockWarned;
+
+  if (isBlocked) {
+    if (blockSince == 0) blockSince = now;
+    if (!longWarned && (now - blockSince >= g_maxSingleDuckBlockMs)) {
+      Serial.print(F("EV type=LONG_BLOCK_SUSPECTED sensor="));
+      Serial.println(legacyName);
+      longWarned = true;
+    }
+  } else {
+    blockSince = 0;
+    longWarned = false;
   }
 }
 
-void checkNoEchoAnomaly(const __FlashStringHelper* which, float cm,
-                         uint32_t &count, unsigned long &lastWarnMs) {
-  if (cm >= 0.0) return;
-
-  count++;
-  unsigned long now = millis();
-  if (lastWarnMs != 0 && now - lastWarnMs < NOECHO_WARN_INTERVAL_MS) return;
-  lastWarnMs = now;
-
-  Serial.print(F("EV type=SENSOR_ANOMALY_NOECHO sensor="));
-  Serial.print(which);
-  Serial.print(F(" count="));
-  Serial.println(count);
-}
-
-void processUs1() {
-  float cm = measureDistanceCm(PIN_US1_TRIG, PIN_US1_ECHO);
-  checkNoEchoAnomaly(F("LS1"), cm, us1NoEchoCount, us1LastNoEchoWarnMs);
-
-  bool currentBlocked = us1Status.rawBlocked;
-  bool valid = classifyReading(cm, currentBlocked);
-  if (valid) {
-    us1Status.rawBlocked = currentBlocked;
-  }
-  bool newState;
-  bool changed = updateUsStatus(us1Status, currentBlocked, valid, newState);
-
-  if (!us1EverSent || us1Status.rawBlocked != us1LastSentBlocked) {
-    sendSensorEdge(F("LS1"), us1Status.rawBlocked, cm);
-    us1LastSentBlocked = us1Status.rawBlocked;
-    us1EverSent = true;
-  }
-
-  trackLongBlock(F("LS1"), us1Status.stableBlocked, us1BlockedSinceMs, us1LongBlockWarned, duck.seq);
-  if (changed && newState) onLS1Falling();
-}
-
-void processUs2() {
-  float cm = measureDistanceCm(PIN_US2_TRIG, PIN_US2_ECHO);
-  checkNoEchoAnomaly(F("LS2"), cm, us2NoEchoCount, us2LastNoEchoWarnMs);
-
-  bool currentBlocked = us2Status.rawBlocked;
-  bool valid = classifyReading(cm, currentBlocked);
-  if (valid) {
-    us2Status.rawBlocked = currentBlocked;
-  }
-  bool newState;
-  bool changed = updateUsStatus(us2Status, currentBlocked, valid, newState);
-
-  if (!us2EverSent || us2Status.rawBlocked != us2LastSentBlocked) {
-    sendSensorEdge(F("LS2"), us2Status.rawBlocked, cm);
-    us2LastSentBlocked = us2Status.rawBlocked;
-    us2EverSent = true;
-  }
-
-  trackLongBlock(F("LS2"), us2Status.stableBlocked, us2BlockedSinceMs, us2LongBlockWarned, duck.seq);
-  if (changed && newState) onLS2Falling();
-}
-
-void updateUltrasonicSensors() {
-  unsigned long now = millis();
+void updateSensors(unsigned long now) {
   if (now - usLastMeasureMs < g_usIntervalMs) return;
   usLastMeasureMs = now;
 
   if (usNextSensor == 1) {
-    processUs1();
+    float cm1 = measureUltraschallRaw(PIN_US1_TRIG, PIN_US1_ECHO);
+    processUsSensor(1, cm1, now);
     usNextSensor = 2;
   } else {
-    processUs2();
+    float cm2 = measureUltraschallRaw(PIN_US2_TRIG, PIN_US2_ECHO);
+    processUsSensor(2, cm2, now);
     usNextSensor = 1;
   }
 }
 
-void recoverI2CBus() {
-  pinMode(I2C_SDA_PIN, INPUT_PULLUP);
-  pinMode(I2C_SCL_PIN, INPUT_PULLUP);
-  delayMicroseconds(10);
-
-  if (digitalRead(I2C_SDA_PIN) == LOW) {
-    for (uint8_t i = 0; i < 10; i++) {
-      pinMode(I2C_SCL_PIN, OUTPUT);
-      digitalWrite(I2C_SCL_PIN, LOW);
-      delayMicroseconds(10);
-      pinMode(I2C_SCL_PIN, INPUT_PULLUP);
-      delayMicroseconds(10);
-      if (digitalRead(I2C_SDA_PIN) == HIGH) break;
-    }
-  }
-
-  pinMode(I2C_SDA_PIN, OUTPUT);
-  digitalWrite(I2C_SDA_PIN, LOW);
-  delayMicroseconds(10);
-  pinMode(I2C_SCL_PIN, OUTPUT);
-  digitalWrite(I2C_SCL_PIN, HIGH);
-  delayMicroseconds(10);
-  pinMode(I2C_SDA_PIN, INPUT_PULLUP);
-  delayMicroseconds(10);
-  pinMode(I2C_SCL_PIN, INPUT_PULLUP);
-}
-
-void setupPn532() {
-  if (TEST_MODE) { nfcReady = false; return; }
-
-  recoverI2CBus();
-
-  Wire.begin();
-  Wire.setWireTimeout(1000000UL, true);
-
-  Wire.beginTransmission(0x24);
-  byte i2cError = Wire.endTransmission();
-
-  if (i2cError == 0) {
-    nfc.begin();
-    uint32_t versiondata = nfc.getFirmwareVersion();
-    if (versiondata) {
-      nfc.SAMConfig();
-      nfcReady = true;
-      nfcPollState = NFC_POLL_IDLE;
-    } else {
-      nfcReady = false;
-    }
-  } else {
-    nfcReady = false;
-  }
-}
-
-void maybeRetryNfcInit() {
-  if (TEST_MODE) return;
-  if (nfcReady) return;
-
-  unsigned long now = millis();
-  if (now - lastNfcRetryMs < NFC_RETRY_INTERVAL_MS) return;
-  lastNfcRetryMs = now;
-
-  setupPn532();
-  if (nfcReady) {
-    sendEvent(F("NFC_RECOVERED"), 0);
-  }
-}
-
-void pollNfc() {
-  if (TEST_MODE) return;
-  if (!nfcReady) return;
-
-  bool wantPoll = (nfcMode == NFC_MODE_CONTINUOUS) || (duck.active && !duck.uidValid);
-
-  if (nfcPollState == NFC_POLL_IDLE) {
-    if (!wantPoll) return;
-
-    bool started = nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
-    if (Wire.getWireTimeoutFlag()) {
-      Wire.clearWireTimeoutFlag();
-      nfcReady = false;
-      sendEvent(F("NFC_TIMEOUT_DETECTED"), 0);
-      return;
-    }
-    if (started) {
-      nfcPollState = NFC_POLL_WAITING;
-      nfcPollStartMs = millis();
+// -------------------- NFC Polling --------------------
+void updateNfc(unsigned long now) {
+  if (!nfcReady) {
+    if (now - lastNfcRetryMs >= NFC_RETRY_INTERVAL_MS) {
+      lastNfcRetryMs = now;
+      initPN532Hardware();
     }
     return;
   }
 
-  if (digitalRead(PN532_IRQ) == LOW) {
-    uint8_t uid[7];
-    uint8_t uidLen = 0;
-    bool success = nfc.readDetectedPassiveTargetID(uid, &uidLen);
-    nfcPollState = NFC_POLL_IDLE;
-
-    if (Wire.getWireTimeoutFlag()) {
-      Wire.clearWireTimeoutFlag();
-      nfcReady = false;
-      sendEvent(F("NFC_TIMEOUT_DETECTED"), 0);
-      return;
-    }
-
-    if (!success) return;
-
-    char dec[24];
-    uidToDecimal(uid, uidLen, dec, sizeof(dec));
-
-    strncpy(lastUid, dec, sizeof(lastUid) - 1);
-    lastUid[sizeof(lastUid) - 1] = '\0';
-    sendTagEvent(dec);
-
-    if (duck.active && !duck.uidValid) {
-      strncpy(duck.uidHex, dec, sizeof(duck.uidHex) - 1);
-      duck.uidHex[sizeof(duck.uidHex) - 1] = '\0';
-      duck.uidValid = true;
-    }
-    return;
+  bool shouldPoll = false;
+  if (duck.active && !duck.nfcFound) {
+    shouldPoll = true;
+  } else if (nfcMode == NFC_MODE_CONTINUOUS && (now - lastNfcPollMs >= NFC_IDLE_POLL_MS)) {
+    shouldPoll = true;
   }
 
-  if (millis() - nfcPollStartMs > g_nfcTimeoutMs) {
-    nfcPollState = NFC_POLL_IDLE;
+  if (!shouldPoll) return;
+  lastNfcPollMs = now;
+
+  uint8_t rawUid[7];
+  uint8_t uidLen = 0;
+
+  bool success = nfc.readPassiveTargetID(
+    PN532_MIFARE_ISO14443A,
+    rawUid,
+    &uidLen,
+    g_nfcTimeoutMs
+  );
+
+  if (success && uidLen > 0) {
+    char decBuf[25];
+    uidToDecimal(rawUid, uidLen, decBuf);
+
+    if (strcmp(decBuf, lastUid) != 0 || duck.active) {
+      strcpy(lastUid, decBuf);
+      sendTagEvent(decBuf);
+    }
+
+    if (duck.active && !duck.nfcFound) {
+      strcpy(duck.uid, decBuf);
+      duck.nfcFound = true;
+    }
   }
 }
 
-void handleCommand(char* line) {
-  char* cmd = strtok(line, " ");
-  if (!cmd) return;
+// -------------------- Serial Parser --------------------
+long parseLongVal(const char* line, const char* key) {
+  const char* p = strstr(line, key);
+  if (!p) return 0;
+  p += strlen(key);
+  return atol(p);
+}
 
-  long token = -1;
-  char side = 'N';
-  int fast = -1;
-  int slow = -1;
-  long servoUs = -1;
-  char uid[24] = {0};
-  char modeArg[12] = {0};
-  char key[12] = {0};
-  long value = -1;
-  int switchFlag = -1;
-
-  char* tok;
-  while ((tok = strtok(nullptr, " ")) != nullptr) {
-    if (strncmp(tok, "token=", 6) == 0) token = atol(tok + 6);
-    else if (strncmp(tok, "side=", 5) == 0) side = tok[5];
-    else if (strncmp(tok, "fast=", 5) == 0) fast = atoi(tok + 5);
-    else if (strncmp(tok, "slow=", 5) == 0) slow = atoi(tok + 5);
-    else if (strncmp(tok, "us=", 3) == 0) servoUs = atol(tok + 3);
-    else if (strncmp(tok, "uid=", 4) == 0) {
-      strncpy(uid, tok + 4, sizeof(uid) - 1);
-      uid[sizeof(uid) - 1] = '\0';
-    } else if (strncmp(tok, "mode=", 5) == 0) {
-      strncpy(modeArg, tok + 5, sizeof(modeArg) - 1);
-      modeArg[sizeof(modeArg) - 1] = '\0';
-    } else if (strncmp(tok, "key=", 4) == 0) {
-      strncpy(key, tok + 4, sizeof(key) - 1);
-      key[sizeof(key) - 1] = '\0';
-    } else if (strncmp(tok, "value=", 6) == 0) {
-      value = atol(tok + 6);
-    } else if (strncmp(tok, "switch=", 7) == 0) {
-      switchFlag = atoi(tok + 7);
-    }
+void parseStringVal(const char* line, const char* key, char* outVal, size_t maxLen) {
+  outVal[0] = '\0';
+  const char* p = strstr(line, key);
+  if (!p) return;
+  p += strlen(key);
+  size_t i = 0;
+  while (*p && *p != ' ' && *p != '\r' && *p != '\n' && i < maxLen - 1) {
+    outVal[i++] = *p++;
   }
+  outVal[i] = '\0';
+}
 
-  if (strcmp(cmd, "PING") == 0) {
-    Serial.print(F("PONG token=")); Serial.print(token);
-    Serial.print(F(" ms=")); Serial.println(millis());
-    return;
-  }
+void handleCommand(char* cmd) {
+  long token = parseLongVal(cmd, "token=");
 
-  if (strcmp(cmd, "STATE?") == 0) {
-    sendAck(token, F("STATE?"));
+  if (strncmp(cmd, "HELLO", 5) == 0) {
+    sendHello();
     sendState();
-    return;
-  }
-
-  if (strcmp(cmd, "CFG?") == 0) {
-    sendAck(token, F("CFG?"));
     sendCfg();
-    return;
+    sendSensorInitStatus();
   }
-
-  if (strcmp(cmd, "CONFIG") == 0) {
-    if (key[0] == '\0' || value == -1) { sendNack(token, F("BAD_KEYVAL")); return; }
-    bool ok = true;
-    if (strcmp(key, "POSRESTL") == 0) g_posRestLeft = clampServo((int)value);
-    else if (strcmp(key, "POSKICKL") == 0) g_posKickLeft = clampServo((int)value);
-    else if (strcmp(key, "POSKICKR") == 0) g_posKickRight = clampServo((int)value);
-    else if (strcmp(key, "POSRESTR") == 0) g_posRestRight = clampServo((int)value);
-    else if (strcmp(key, "KDELAY") == 0) g_kloeppelDelay = (unsigned long)value;
-    else if (strcmp(key, "KHOLD") == 0) g_kickHoldMs = (unsigned long)value;
-    else if (strcmp(key, "RHOLD") == 0) g_returnHoldMs = (unsigned long)value;
-    else if (strcmp(key, "RHOLDSW") == 0) g_returnWechselMs = (unsigned long)value;
-    else if (strcmp(key, "INVERT") == 0) g_invertLogic = (value != 0);
-    else if (strcmp(key, "USTHRESHMM") == 0) g_usThresholdMm = (unsigned long)value;
-    else if (strcmp(key, "USCONFIRM") == 0) g_usConfirmCount = (uint8_t)constrain(value, 1, 20);
-    else if (strcmp(key, "USINTERVAL") == 0) g_usIntervalMs = (unsigned long)constrain(value, 3, 500);
-    else if (strcmp(key, "USECHOTIMEOUT") == 0) g_usEchoTimeoutUs = (unsigned long)constrain(value, 500, 8000);
-    else if (strcmp(key, "MAXBLOCKMS") == 0) g_maxSingleDuckBlockMs = (unsigned long)value;
-    else if (strcmp(key, "NFCTIMEOUT") == 0) g_nfcTimeoutMs = (unsigned long)constrain(value, 10, 2000);
-    else if (strcmp(key, "NFCRETRIES") == 0) {
-      g_nfcRetries = (uint8_t)constrain(value, 1, 255);
-      if (nfcReady) nfc.setPassiveActivationRetries(g_nfcRetries);
-    }
-    else ok = false;
-
-    if (!ok) { sendNack(token, F("UNKNOWN_KEY")); return; }
-    sendAck(token, F("CONFIG"));
+  else if (strncmp(cmd, "STATE?", 6) == 0) {
+    sendState();
+    sendSensorInitStatus();
+  }
+  else if (strncmp(cmd, "CFG?", 4) == 0) {
     sendCfg();
-    return;
   }
-
-  if (strcmp(cmd, "NFCMODE") == 0) {
-    if (strcmp(modeArg, "CONTINUOUS") == 0) {
-      nfcMode = NFC_MODE_CONTINUOUS;
-      sendAck(token, F("NFCMODE"));
-      sendState();
-    } else if (strcmp(modeArg, "DUCKONLY") == 0) {
-      nfcMode = NFC_MODE_DUCKONLY;
-      sendAck(token, F("NFCMODE"));
-      sendState();
-    } else {
-      sendNack(token, F("BAD_MODE"));
-    }
-    return;
+  else if (strncmp(cmd, "ARM", 3) == 0) {
+    char side[4] = "N";
+    parseStringVal(cmd, "side=", side, sizeof(side));
+    armedSide = side[0];
+    armedIsSwitch = (parseLongVal(cmd, "switch=") == 1);
+    sendAck(token, F("ARM"));
   }
-
-  if (strcmp(cmd, "ARM") == 0) {
-    if (side == 'L' || side == 'R' || side == 'N') {
-      armedSide = side;
-      armedIsSwitch = (switchFlag == 1);
-      sendAck(token, F("ARM"));
-      sendState();
-    } else {
-      sendNack(token, F("BAD_SIDE"));
-    }
-    return;
-  }
-
-  if (strcmp(cmd, "MOTOR") == 0) {
-    if (fast < 0 || fast > 255 || slow < 0 || slow > 255) {
-      sendNack(token, F("BAD_PWM"));
-      return;
-    }
-    pwmFast = (uint8_t)fast;
-    pwmSlow = (uint8_t)slow;
+  else if (strncmp(cmd, "MOTOR", 5) == 0) {
+    pwmFast = (uint8_t)parseLongVal(cmd, "fast=");
+    pwmSlow = (uint8_t)parseLongVal(cmd, "slow=");
     analogWrite(PIN_MOTOR_SCHNELL, pwmFast);
     analogWrite(PIN_MOTOR_LANGSAM, pwmSlow);
     sendAck(token, F("MOTOR"));
     sendState();
-    return;
   }
-
-  if (strcmp(cmd, "SERVOUS") == 0) {
-    if (servoUs < 0) { sendNack(token, F("BAD_US")); return; }
-    if (servoActionState != SERVO_IDLE || qCount > 0) {
-      sendNack(token, F("SERVO_BUSY"));
-      return;
-    }
-    driveServo(clampServo((int)servoUs));
-    sendAck(token, F("SERVOUS"));
-    return;
+  else if (strncmp(cmd, "NFCMODE", 7) == 0) {
+    char mode[16] = "";
+    parseStringVal(cmd, "mode=", mode, sizeof(mode));
+    if (strcmp(mode, "DUCKONLY") == 0) nfcMode = NFC_MODE_DUCKONLY;
+    else nfcMode = NFC_MODE_CONTINUOUS;
+    sendAck(token, F("NFCMODE"));
   }
-
-  if (strcmp(cmd, "KICK") == 0) {
-    if (!(side == 'L' || side == 'R')) { sendNack(token, F("BAD_SIDE")); return; }
-    bool ok = enqueueKick(side, 999999, millis() + 50, false);
-    if (!ok) { sendNack(token, F("QUEUE_FULL")); return; }
+  else if (strncmp(cmd, "KICK", 4) == 0) {
+    char side[4] = "L";
+    parseStringVal(cmd, "side=", side, sizeof(side));
+    enqueueKick(side[0], 0, millis(), false);
     sendAck(token, F("KICK"));
-    return;
   }
+  else if (strncmp(cmd, "SERVOUS", 7) == 0) {
+    int us = (int)parseLongVal(cmd, "us=");
+    driveServo(clampServo(us));
+    sendAck(token, F("SERVOUS"));
+  }
+  else if (strncmp(cmd, "CONFIG", 6) == 0) {
+    char key[20] = "";
+    parseStringVal(cmd, "key=", key, sizeof(key));
+    long val = parseLongVal(cmd, "value=");
 
-  if (strcmp(cmd, "SIMTAG") == 0) {
-    if (!TEST_MODE) { sendNack(token, F("TESTMODE_OFF")); return; }
-    if (uid[0] == '\0') { sendNack(token, F("NO_UID")); return; }
-
-    strncpy(lastUid, uid, sizeof(lastUid) - 1);
-    lastUid[sizeof(lastUid) - 1] = '\0';
-    sendAck(token, F("SIMTAG"));
-    sendTagEvent(uid);
-
-    if (duck.active && !duck.uidValid) {
-      strncpy(duck.uidHex, uid, sizeof(duck.uidHex) - 1);
-      duck.uidHex[sizeof(duck.uidHex) - 1] = '\0';
-      duck.uidValid = true;
+    if (strcmp(key, "POSRESTL") == 0) {
+      g_posRestLeft = val;
+      recalculateKickPositions();
     }
-    return;
-  }
+    else if (strcmp(key, "POSMID") == 0) {
+      g_posMid = val;
+      recalculateKickPositions();
+    }
+    else if (strcmp(key, "POSRESTR") == 0) {
+      g_posRestRight = val;
+      recalculateKickPositions();
+    }
+    else if (strcmp(key, "KDELAY") == 0) g_kloeppelDelay = val;
+    else if (strcmp(key, "KHOLD") == 0) g_kickHoldMs = val;
+    else if (strcmp(key, "RHOLD") == 0) g_returnHoldMs = val;
+    else if (strcmp(key, "RHOLDSW") == 0) g_returnWechselMs = val;
+    else if (strcmp(key, "INVERT") == 0) g_invertLogic = (val == 1);
+    else if (strcmp(key, "USTHRESHMM") == 0) g_usThresholdMm = val;
+    else if (strcmp(key, "USCONFIRM") == 0) g_usConfirmCount = (uint8_t)val;
+    else if (strcmp(key, "USINTERVAL") == 0) g_usIntervalMs = val;
+    else if (strcmp(key, "USECHOTIMEOUT") == 0) g_usEchoTimeoutUs = val;
+    else if (strcmp(key, "MAXBLOCKMS") == 0) g_maxSingleDuckBlockMs = val;
+    else if (strcmp(key, "NFCTIMEOUT") == 0) g_nfcTimeoutMs = val;
+    else if (strcmp(key, "NFCRETRIES") == 0) g_nfcRetries = (uint8_t)val;
 
-  if (strcmp(cmd, "LED") == 0) {
-    digitalWrite(PIN_LED, side == 'L' ? HIGH : LOW);
-    sendAck(token, F("LED"));
-    return;
+    sendAck(token, F("CONFIG"));
   }
-
-  sendNack(token, F("UNKNOWN_CMD"));
+  else {
+    sendNack(token, F("UNKNOWN_CMD"));
+  }
 }
 
-void readSerialLines() {
+void updateSerial() {
   while (Serial.available() > 0) {
     char c = (char)Serial.read();
     if (c == '\r') continue;
@@ -879,61 +680,60 @@ void readSerialLines() {
       rxLine[rxPos] = '\0';
       if (rxPos > 0) {
         handleCommand(rxLine);
-        wdt_reset();
       }
       rxPos = 0;
-      continue;
+    } else {
+      if (rxPos < sizeof(rxLine) - 1) {
+        rxLine[rxPos++] = c;
+      }
     }
-    if (rxPos < sizeof(rxLine) - 1) rxLine[rxPos++] = c;
-    else rxPos = 0;
   }
 }
 
+// -------------------- Setup & Loop --------------------
 void setup() {
-  wdt_disable();
-
   Serial.begin(115200);
+  delay(800);
 
   pinMode(PIN_US1_TRIG, OUTPUT);
   pinMode(PIN_US1_ECHO, INPUT);
   pinMode(PIN_US2_TRIG, OUTPUT);
   pinMode(PIN_US2_ECHO, INPUT);
-  pinMode(PIN_LED, OUTPUT);
+
   pinMode(PIN_MOTOR_SCHNELL, OUTPUT);
   pinMode(PIN_MOTOR_LANGSAM, OUTPUT);
-  pinMode(PN532_IRQ, INPUT_PULLUP);
+  analogWrite(PIN_MOTOR_SCHNELL, 0);
+  analogWrite(PIN_MOTOR_LANGSAM, 0);
 
-  digitalWrite(PIN_US1_TRIG, LOW);
-  digitalWrite(PIN_US2_TRIG, LOW);
-  digitalWrite(PIN_LED, LOW);
+  recalculateKickPositions();
 
-  analogWrite(PIN_MOTOR_SCHNELL, pwmFast);
-  analogWrite(PIN_MOTOR_LANGSAM, pwmSlow);
+  clearI2CBusUnconditional();
 
-  driveServo(g_posRestLeft);
+  Wire.begin();
+  #if defined(WIRE_HAS_TIMEOUT)
+    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+  #endif
 
-  setupPn532();
-  delay(100);
+  initPN532Hardware();
+
+  // Startposition: 45° Ruhe Links (2122 µs)
+  driveServo(clampServo(g_posRestLeft));
+
   sendHello();
   sendState();
   sendCfg();
-
-  wdt_enable(WATCHDOG_TIMEOUT);
+  sendSensorInitStatus();
 }
 
 void loop() {
-  wdt_reset();
-
-  readSerialLines();
-  updateUltrasonicSensors();
-  maybeRetryNfcInit();
-  pollNfc();
-  updateKickExecutor();
-  updateServoAutoDetach();
-  checkDuckStuck();
-
   unsigned long now = millis();
-  if (now - lastHelloMs >= 5000) {
+
+  updateSerial();
+  updateSensors(now);
+  updateNfc(now);
+  updateServo(now);
+
+  if (now - lastHelloMs >= HELLO_INTERVAL_MS) {
     lastHelloMs = now;
     sendHello();
   }

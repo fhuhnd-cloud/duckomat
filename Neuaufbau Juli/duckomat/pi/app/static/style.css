@@ -193,3 +193,26 @@ html, body {
   color: #888;
   padding: 20px 0;
 }
+
+/* ===== US-Sensor Boxen: Kräftige Signalfarben (identisch zu Motor An/Aus) ===== */
+.box.sensor {
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-weight: 500;
+}
+
+.box.sensor.free {
+  background-color: #27ae60 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(39, 174, 96, 0.4);
+}
+
+.box.sensor.blocked {
+  background-color: #c0392b !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(192, 57, 43, 0.5);
+}
+
+.box.sensor small {
+  color: #f1f2f6;
+  font-weight: normal;
+}

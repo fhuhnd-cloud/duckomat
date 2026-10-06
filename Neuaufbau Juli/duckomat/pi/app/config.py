@@ -1,5 +1,5 @@
 # config.py
-SERIAL_PORT = "COM5"
+SERIAL_PORT = "COM3"
 BAUD_RATE = 115200
 HOST = "0.0.0.0"
 PORT = 5000

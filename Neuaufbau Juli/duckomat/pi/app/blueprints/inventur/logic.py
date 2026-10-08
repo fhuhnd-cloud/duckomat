@@ -35,41 +35,36 @@ class SortingSession:
             return False
         with self.lock:
             self.start_direction = direction
-            # Explizite Richtungswahl ist die bewusste "frisch aufsetzen"-
-            # Aktion: setzt AUCH sofort die aktuelle Sortierrichtung und den
-            # Chargen-Zaehler zurueck. Start()/Stop() danach ueberschreiben
-            # das NICHT mehr - das war der Kern beider gemeldeter Probleme
-            # (Versatz durch Alt-Zaehlerstand, Richtung wird nicht behalten).
             self.current_direction = direction
             self.batch_count = 0
         return True
 
     def _preposition_servo(self):
-        # Nutzt die AKTUELLE Richtung (nicht mehr die urspruengliche
-        # Start-Auswahl), damit ein Resume nach Stop den Kloeppel korrekt
-        # auf die zu diesem Zeitpunkt passende Seite stellt.
         cfg = self.controller.get_state().get("cfg") or {}
         if self.current_direction == "LEFT":
-            target_us = cfg.get("posrestl", 990)
+            target_us = cfg.get("posrestl", 2122)
         else:
-            target_us = cfg.get("posrestr", 2030)
+            target_us = cfg.get("posrestr", 1050)
         self.controller.send_servo_us(target_us)
 
     def start(self):
         with self.lock:
             self.running = True
             self.paused_for_rejects = False
-            # current_direction UND batch_count bleiben bewusst unveraendert -
-            # ein erneuter Start nach Stop setzt mit der zuletzt aktiven
-            # Richtung und dem laufenden Chargen-Stand fort.
+            self.batch_count = 0
+
+        # Vor dem Start Klöppel auf Startseite
         self._preposition_servo()
         self.controller.send_nfcmode("DUCKONLY")
-        self.controller.send_motor(self.DEFAULT_FAST_PWM, self.DEFAULT_SLOW_PWM)
-        self.note_current_pwm(self.DEFAULT_FAST_PWM, self.DEFAULT_SLOW_PWM)
-        # Sicherheitsnetz: vereinzelt ging der allererste Motor-Befehl nach
-        # Serverstart verloren. Ein zweites, identisches Senden ist
-        # folgenlos (idempotent) und behebt das zuverlaessig.
-        self.controller.send_motor(self.DEFAULT_FAST_PWM, self.DEFAULT_SLOW_PWM)
+
+        # Kistengröße und Start-Seite autonom an den Nano übergeben!
+        self.controller.send_config("BATCHSIZE", self.BATCH_SIZE)
+        side_letter = "L" if self.start_direction == "LEFT" else "R"
+        self.controller.send_arm(side_letter)
+
+        # Motoren starten
+        self.controller.send_motor(self._last_fast_pwm, self._last_slow_pwm)
+        self.controller.send_motor(self._last_fast_pwm, self._last_slow_pwm)
 
     def stop(self):
         with self.lock:
@@ -78,11 +73,8 @@ class SortingSession:
             self.controller.send_arm("N")
         self.controller.send_nfcmode("CONTINUOUS")
         self.controller.send_motor(0, 0)
-        self.note_current_pwm(0, 0)
 
     def reset_session(self):
-        # Einzige Stelle, die current_direction explizit auf die urspruengliche
-        # Auswahl zuruecksetzt - eine bewusste "alles neu"-Aktion.
         with self.lock:
             self.batch_count = 0
             self.current_direction = self.start_direction
@@ -92,6 +84,7 @@ class SortingSession:
             self.reject_batch_count = 0
             self.log = []
             self.paused_for_rejects = False
+        self._preposition_servo()
 
     def set_stop_on_rejects(self, enabled):
         with self.lock:
@@ -113,11 +106,9 @@ class SortingSession:
 
     def _trigger_reject_stop(self):
         self.controller.send_motor(self._last_fast_pwm, 0)
-
         def delayed_stop_fast():
             time.sleep(self.MOTOR_STOP_DELAY_S)
             self.controller.send_motor(0, 0)
-
         self._stop_timer = threading.Thread(target=delayed_stop_fast, daemon=True)
         self._stop_timer.start()
 
@@ -140,26 +131,14 @@ class SortingSession:
             }
 
     def _on_event(self, event_type, payload):
-        if event_type == "LS1_DUCK":
-            self._handle_ls1()
-        elif event_type == "DUCK":
+        if event_type == "DUCK":
             self._handle_duck_result(payload)
-
-    def _handle_ls1(self):
-        with self.lock:
-            if not self.running or self.paused_for_rejects:
-                self.controller.send_arm("N")
-                return
-            side_letter = "L" if self.current_direction == "LEFT" else "R"
-            is_switch = (self.batch_count + 1) >= self.BATCH_SIZE
-        self.controller.send_arm(side_letter, switch=is_switch)
 
     def _handle_duck_result(self, payload):
         uid = payload.get("uid")
         result = payload.get("result")
         seq = payload.get("seq")
         nummer = get_number_for_uid(uid) if uid and uid != "NONE" else None
-
         trigger_stop = False
 
         with self.lock:
@@ -176,6 +155,7 @@ class SortingSession:
                 self.session_rejected += 1
                 self.reject_batch_count += 1
 
+            # UI-Synchronisation: Seite für die Anzeige anpassen
             if self.batch_count >= self.BATCH_SIZE:
                 self.batch_count = 0
                 self.current_direction = "RIGHT" if self.current_direction == "LEFT" else "LEFT"

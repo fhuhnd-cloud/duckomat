@@ -5,16 +5,7 @@
 #include "duck_types.h"
 
 // ============================================================
-// Duckomat Nano-Firmware (fw=28.8)
-//
-// KALIBRIERTE BASISWERTE:
-// 1. POSRESTL = 2122 µs (45° Ruhe Links)
-// 2. POSMID   = 1600 µs (90° Neutral)
-// 3. POSRESTR = 1050 µs (135° Ruhe Rechts)
-// 4. Automatisch berechnet:
-//    - Kick Rechts (75°) = 1774 µs
-//    - Kick Links (105°) = 1417 µs
-// 5. Freigegebene Schutzgrenzen: 750 µs - 2250 µs (MASTER Digital DS6030 TG)
+// Duckomat Nano-Firmware (fw=30.0 Autonome Batch-Steuerung)
 // ============================================================
 
 // -------------------- Pins --------------------
@@ -24,8 +15,8 @@
 #define PIN_US2_ECHO 2
 #define PIN_SERVO 5
 #define PIN_LED 6
-#define PN532_RESET 7  // Dummy-Pin (physisch nicht verbunden)
-#define PN532_IRQ 8    // Dummy-Pin (physisch nicht verbunden)
+#define PN532_RESET 7  // Dummy-Pin
+#define PN532_IRQ 8    // Dummy-Pin
 
 #define PIN_MOTOR_SCHNELL 9
 #define PIN_MOTOR_LANGSAM 10
@@ -38,12 +29,11 @@ const bool TEST_MODE = false;
 
 const int SERVO_SAFE_MIN = 750;
 const int SERVO_SAFE_MAX = 2250;
-const bool SERVO_AUTO_DETACH_ENABLED = true;
-const unsigned long SERVO_DETACH_DELAY_MS = 350;
+const bool SERVO_AUTO_DETACH_ENABLED = false;
 
 // Die 3 gemessenen Basis-Winkel
 int g_posRestLeft = 2122;     // 45° Ruhe Links
-int g_posMid = 1600;          // 90° Mitte / Neutral
+int g_posMid = 1600;          // 90° Neutral
 int g_posRestRight = 1050;     // 135° Ruhe Rechts
 
 // Automatisch berechnete Kick-Winkel
@@ -53,7 +43,7 @@ int g_posKickLeft = 1417;     // 105° Kick Links
 unsigned long g_kloeppelDelay = 400;      // 400 ms Delay US2 -> Klöppel
 unsigned long g_kickHoldMs = 260;
 unsigned long g_returnHoldMs = 260;
-unsigned long g_returnWechselMs = 150;
+unsigned long g_returnWechselMs = 200;    // Etwas mehr Zeit für den weiten 90°-Weg
 bool g_invertLogic = false;
 
 unsigned long g_usThresholdMm = 100;     // 100 mm = 10 cm Schwellwert
@@ -70,10 +60,13 @@ const unsigned long NFC_IDLE_POLL_MS = 300;
 const unsigned long NFC_RETRY_INTERVAL_MS = 4000;
 const unsigned long HELLO_INTERVAL_MS = 1500;
 
+// Autonome Kistengröße im Nano
+uint16_t g_batchSize = 100;
+
 // -------------------- Servo --------------------
 ServoTimer2 kloeppel;
 bool servoAttached = false;
-unsigned long servoLastDriveMs = 0;
+int lastWrittenServoUs = -1;
 
 // -------------------- PN532 --------------------
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
@@ -86,12 +79,12 @@ NfcMode nfcMode = NFC_MODE_CONTINUOUS;
 uint8_t pwmFast = 0;
 uint8_t pwmSlow = 0;
 
-char armedSide = 'N';
-bool armedIsSwitch = false;
+bool sortingRunning = false;
+char currentSortSide = 'L';      // 'L' oder 'R'
+uint16_t currentBatchCount = 0;   // Zählt bis g_batchSize
 char lastUid[25] = "NONE";
 
 unsigned long lastHelloMs = 0;
-
 char rxLine[80];
 uint8_t rxPos = 0;
 
@@ -102,7 +95,6 @@ unsigned long us1BlockedSinceMs = 0;
 unsigned long us2BlockedSinceMs = 0;
 bool us1LongBlockWarned = false;
 bool us2LongBlockWarned = false;
-
 unsigned long us1LastNoEchoWarnMs = 0;
 unsigned long us2LastNoEchoWarnMs = 0;
 const unsigned long NOECHO_WARN_INTERVAL_MS = 5000UL;
@@ -147,23 +139,14 @@ int clampServo(int us) {
 }
 
 void driveServo(int us) {
+  int target = clampServo(us);
   if (!servoAttached) {
     kloeppel.attach(PIN_SERVO);
     servoAttached = true;
   }
-  kloeppel.write(us);
-  servoLastDriveMs = millis();
-}
-
-void updateServoAutoDetach() {
-  if (!SERVO_AUTO_DETACH_ENABLED) return;
-  if (!servoAttached) return;
-  if (servoActionState != SERVO_IDLE) return;
-  if (millis() - servoLastDriveMs >= SERVO_DETACH_DELAY_MS) {
-    kloeppel.detach();
-    servoAttached = false;
-    pinMode(PIN_SERVO, OUTPUT);
-    digitalWrite(PIN_SERVO, LOW);
+  if (lastWrittenServoUs != target) {
+    kloeppel.write(target);
+    lastWrittenServoUs = target;
   }
 }
 
@@ -216,7 +199,7 @@ void clearI2CBusUnconditional() {
 
 bool initPN532Hardware() {
   #if defined(WIRE_HAS_TIMEOUT)
-    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+    Wire.setWireTimeout(25000, true);
   #endif
 
   Wire.beginTransmission(0x24);
@@ -229,7 +212,7 @@ bool initPN532Hardware() {
   nfc.begin();
 
   #if defined(WIRE_HAS_TIMEOUT)
-    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+    Wire.setWireTimeout(25000, true);
   #endif
 
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -255,13 +238,13 @@ void sendNack(long token, const __FlashStringHelper* reason) {
 }
 
 void sendHello() {
-  Serial.print(F("HELLO fw=28 test=")); Serial.print(TEST_MODE ? 1 : 0);
+  Serial.print(F("HELLO fw=30 test=")); Serial.print(TEST_MODE ? 1 : 0);
   Serial.print(F(" nfc=")); Serial.print(nfcReady ? 1 : 0);
   Serial.print(F(" nfcmode=")); Serial.println(nfcMode == NFC_MODE_CONTINUOUS ? F("CONTINUOUS") : F("DUCKONLY"));
 }
 
 void sendState() {
-  Serial.print(F("STATE armed=")); Serial.print(armedSide);
+  Serial.print(F("STATE armed=")); Serial.print(sortingRunning ? currentSortSide : 'N');
   Serial.print(F(" q=")); Serial.print(qCount);
   Serial.print(F(" fast=")); Serial.print(pwmFast);
   Serial.print(F(" slow=")); Serial.print(pwmSlow);
@@ -294,7 +277,8 @@ void sendCfg() {
   Serial.print(F(" usechotimeout=")); Serial.print(g_usEchoTimeoutUs);
   Serial.print(F(" maxblockms=")); Serial.print(g_maxSingleDuckBlockMs);
   Serial.print(F(" nfctimeout=")); Serial.print(g_nfcTimeoutMs);
-  Serial.print(F(" nfcretries=")); Serial.println(g_nfcRetries);
+  Serial.print(F(" nfcretries=")); Serial.print(g_nfcRetries);
+  Serial.print(F(" batchsize=")); Serial.println(g_batchSize);
 }
 
 void sendEvent(const __FlashStringHelper* type, uint32_t seq) {
@@ -359,8 +343,6 @@ void popKick() {
 }
 
 void updateServo(unsigned long now) {
-  updateServoAutoDetach();
-
   if (servoActionState == SERVO_IDLE) {
     KickJob job;
     if (peekKick(job)) {
@@ -376,7 +358,7 @@ void updateServo(unsigned long now) {
           ? (g_invertLogic ? g_posKickRight : g_posKickLeft)
           : (g_invertLogic ? g_posKickLeft : g_posKickRight);
 
-        driveServo(clampServo(targetPos));
+        driveServo(targetPos);
         servoActionState = SERVO_HIT;
         servoPhaseMs = now + g_kickHoldMs;
       }
@@ -387,19 +369,21 @@ void updateServo(unsigned long now) {
       int restPos;
       unsigned long holdTime;
 
+      // Wenn Kistenwechsel (isSwitch): Nach dem Kick auf die GEGENÜBERLIEGENDE Ruheposition fahren!
       if (activeKickIsSwitch) {
         restPos = (activeKickSide == 'L')
-          ? (g_invertLogic ? g_posRestLeft : g_posRestRight)
-          : (g_invertLogic ? g_posRestRight : g_posRestLeft);
+          ? (g_invertLogic ? g_posRestLeft : g_posRestRight)    // Von Kick-L (105°) direkt auf Ruhe-R (135°)
+          : (g_invertLogic ? g_posRestRight : g_posRestLeft);   // Von Kick-R (75°) direkt auf Ruhe-L (45°)
         holdTime = g_returnWechselMs;
       } else {
+        // Normaler Kick: Zurück auf dieselbe Seite
         restPos = (activeKickSide == 'L')
-          ? (g_invertLogic ? g_posRestRight : g_posRestLeft)
-          : (g_invertLogic ? g_posRestLeft : g_posRestRight);
+          ? (g_invertLogic ? g_posRestRight : g_posRestLeft)    // Ruhe-L (45°)
+          : (g_invertLogic ? g_posRestLeft : g_posRestRight);   // Ruhe-R (135°)
         holdTime = g_returnHoldMs;
       }
 
-      driveServo(clampServo(restPos));
+      driveServo(restPos);
       servoActionState = SERVO_RETURN;
       servoPhaseMs = now + holdTime;
     }
@@ -454,16 +438,18 @@ void processUsSensor(uint8_t idx, float cm, unsigned long now) {
 
   bool isBlocked = (st.confirmCounter >= g_usConfirmCount);
   st.blocked = isBlocked;
+
   bool &everSent = (idx == 1) ? us1EverSent : us2EverSent;
   bool &lastSent = (idx == 1) ? us1LastSentBlocked : us2LastSentBlocked;
 
   if (!everSent || isBlocked != lastSent) {
     sendSensorEdge(legacyName, isBlocked, cm);
     sendSensorEdge(usName, isBlocked, cm);
-    
+
     lastSent = isBlocked;
     everSent = true;
 
+    // US1 Trigger
     if (idx == 1 && isBlocked) {
       duck.active = true;
       duck.seq = ++duckSeqCounter;
@@ -472,16 +458,31 @@ void processUsSensor(uint8_t idx, float cm, unsigned long now) {
       strcpy(duck.uid, "NONE");
       sendEvent(F("DUCK_START"), duck.seq);
     }
+    // US2 Trigger: Kick-Entscheidung
     else if (idx == 2 && isBlocked) {
       if (duck.active) {
         if (duck.nfcFound && strcmp(duck.uid, "NONE") != 0) {
-          if (armedSide == 'L' || armedSide == 'R') {
-            bool ok = enqueueKick(armedSide, duck.seq, now + g_kloeppelDelay, armedIsSwitch);
-            sendDuckEvent(duck.seq, duck.uid, ok ? (armedSide == 'L' ? RES_KICK_L : RES_KICK_R) : RES_QUEUE_FULL);
+          if (sortingRunning) {
+            // Zählung und Wechsel-Entscheidung findet HIER in Echtzeit statt!
+            currentBatchCount++;
+            bool isSwitch = (currentBatchCount >= g_batchSize);
+
+            char kickSide = currentSortSide;
+
+            // Kick einreihen
+            bool ok = enqueueKick(kickSide, duck.seq, now + g_kloeppelDelay, isSwitch);
+            sendDuckEvent(duck.seq, duck.uid, ok ? (kickSide == 'L' ? RES_KICK_L : RES_KICK_R) : RES_QUEUE_FULL);
+
+            // Wenn Kiste voll: Für die nächste Ente Seite sofort umstellen
+            if (isSwitch) {
+              currentBatchCount = 0;
+              currentSortSide = (currentSortSide == 'L') ? 'R' : 'L';
+            }
           } else {
             sendDuckEvent(duck.seq, duck.uid, RES_UNARMED);
           }
         } else {
+          // Unlesbar: am Bandende auswerfen
           sendDuckEvent(duck.seq, duck.uid, RES_UNREADABLE);
         }
         duck.active = false;
@@ -602,11 +603,17 @@ void handleCommand(char* cmd) {
   else if (strncmp(cmd, "CFG?", 4) == 0) {
     sendCfg();
   }
+  // ARM schaltet Sortiermodus aktiv / inaktiv und setzt Start-Seite
   else if (strncmp(cmd, "ARM", 3) == 0) {
     char side[4] = "N";
     parseStringVal(cmd, "side=", side, sizeof(side));
-    armedSide = side[0];
-    armedIsSwitch = (parseLongVal(cmd, "switch=") == 1);
+    if (side[0] == 'L' || side[0] == 'R') {
+      sortingRunning = true;
+      currentSortSide = side[0];
+      currentBatchCount = 0;
+    } else {
+      sortingRunning = false;
+    }
     sendAck(token, F("ARM"));
   }
   else if (strncmp(cmd, "MOTOR", 5) == 0) {
@@ -640,18 +647,9 @@ void handleCommand(char* cmd) {
     parseStringVal(cmd, "key=", key, sizeof(key));
     long val = parseLongVal(cmd, "value=");
 
-    if (strcmp(key, "POSRESTL") == 0) {
-      g_posRestLeft = val;
-      recalculateKickPositions();
-    }
-    else if (strcmp(key, "POSMID") == 0) {
-      g_posMid = val;
-      recalculateKickPositions();
-    }
-    else if (strcmp(key, "POSRESTR") == 0) {
-      g_posRestRight = val;
-      recalculateKickPositions();
-    }
+    if (strcmp(key, "POSRESTL") == 0) { g_posRestLeft = val; recalculateKickPositions(); }
+    else if (strcmp(key, "POSMID") == 0) { g_posMid = val; recalculateKickPositions(); }
+    else if (strcmp(key, "POSRESTR") == 0) { g_posRestRight = val; recalculateKickPositions(); }
     else if (strcmp(key, "KDELAY") == 0) g_kloeppelDelay = val;
     else if (strcmp(key, "KHOLD") == 0) g_kickHoldMs = val;
     else if (strcmp(key, "RHOLD") == 0) g_returnHoldMs = val;
@@ -664,10 +662,10 @@ void handleCommand(char* cmd) {
     else if (strcmp(key, "MAXBLOCKMS") == 0) g_maxSingleDuckBlockMs = val;
     else if (strcmp(key, "NFCTIMEOUT") == 0) g_nfcTimeoutMs = val;
     else if (strcmp(key, "NFCRETRIES") == 0) g_nfcRetries = (uint8_t)val;
+    else if (strcmp(key, "BATCHSIZE") == 0) { g_batchSize = (uint16_t)val; currentBatchCount = 0; }
 
     sendAck(token, F("CONFIG"));
-  }
-  else {
+  } else {
     sendNack(token, F("UNKNOWN_CMD"));
   }
 }
@@ -708,15 +706,14 @@ void setup() {
   recalculateKickPositions();
 
   clearI2CBusUnconditional();
-
   Wire.begin();
   #if defined(WIRE_HAS_TIMEOUT)
-    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
+    Wire.setWireTimeout(25000, true);
   #endif
 
   initPN532Hardware();
 
-  // Startposition: 45° Ruhe Links (2122 µs)
+  // Ruheposition Links anfahren
   driveServo(clampServo(g_posRestLeft));
 
   sendHello();

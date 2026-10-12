@@ -197,9 +197,39 @@ void clearI2CBusUnconditional() {
   delayMicroseconds(50);
 }
 
+// ------------------------------------------------------------
+// Setzt den Empfänger-Gain (RxGain) des PN532 auf Maximum (43 dB)
+// Register CIU_RxThreshold (0x633C):
+// Bit 6-4 steuern RxGain:
+//   0x44 / 0x55 = Standard (~23 bis 34 dB)
+//   0x77        = 43 dB (Max Gain)
+// ------------------------------------------------------------
+bool setPn532MaxGainDirect() {
+  Wire.beginTransmission(0x24);
+  // PN532 I2C-Frame-Header
+  Wire.write(0x00); // Preamble
+  Wire.write(0x00); // Start Code 1
+  Wire.write(0xFF); // Start Code 2
+  Wire.write(0x05); // Packet Length (TFI + Command + RegMSB + RegLSB + Val = 5 Bytes)
+  Wire.write(0xFB); // Length Checksum (~0x05 + 1)
+  Wire.write(0xD4); // TFI: Host to PN532
+  Wire.write(0x08); // Command: WriteRegister
+  Wire.write(0x63); // Register MSB: CIU_RxThreshold (0x633C)
+  Wire.write(0x3C); // Register LSB
+  Wire.write(0x77); // Wert: 0x77 (RxGain = 111b -> 43 dB, MinLevel = 0111b)
+  
+  // Data Checksum: ~(0xD4 + 0x08 + 0x63 + 0x3C + 0x77) + 1
+  // Summe = 0x22C -> LSB 0x2C -> Invertiert 0xD3 + 1 = 0xD4
+  Wire.write(0xD4);
+  Wire.write(0x00); // Postamble
+  
+  byte err = Wire.endTransmission();
+  return (err == 0);
+}
+
 bool initPN532Hardware() {
   #if defined(WIRE_HAS_TIMEOUT)
-    Wire.setWireTimeout(25000, true);
+    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
   #endif
 
   Wire.beginTransmission(0x24);
@@ -212,7 +242,7 @@ bool initPN532Hardware() {
   nfc.begin();
 
   #if defined(WIRE_HAS_TIMEOUT)
-    Wire.setWireTimeout(25000, true);
+    Wire.setWireTimeout(25000 /* us */, true /* reset_on_timeout */);
   #endif
 
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -222,6 +252,16 @@ bool initPN532Hardware() {
   }
 
   nfc.SAMConfig();
+  
+  // --- HIER NEU: Maximale Empfangsverstärkung aktivieren ---
+  delay(10);
+  if (setPn532MaxGainDirect()) {
+    Serial.println(F("[NFC] RxGain auf 43 dB gesetzt."));
+  } else {
+    Serial.println(F("[NFC] RxGain konnte nicht gesetzt werden."));
+  }
+  // ---------------------------------------------------------
+
   nfcReady = true;
   return true;
 }

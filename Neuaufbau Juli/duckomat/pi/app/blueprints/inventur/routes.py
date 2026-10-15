@@ -26,6 +26,15 @@ def set_start_direction():
         return jsonify({"ok": False, "error": "direction muss LEFT oder RIGHT sein"}), 400
     return jsonify({"ok": True})
 
+@inventur_bp.route("/api/batch_size", methods=["POST"])
+def set_batch_size():
+    data = request.get_json(force=True)
+    size = int(data.get("size", 100))
+    if size < 1 or size > 100000:
+        return jsonify({"ok": False, "error": "ungueltige Kistengroesse"}), 400
+    session().set_batch_size(size)
+    return jsonify({"ok": True})
+
 @inventur_bp.route("/api/start", methods=["POST"])
 def start():
     session().start()

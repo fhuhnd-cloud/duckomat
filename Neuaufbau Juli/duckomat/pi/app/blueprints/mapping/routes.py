@@ -1,7 +1,9 @@
+# blueprints/mapping/routes.py
 from flask import Blueprint, render_template, jsonify, request, current_app, Response
 from . import db
 import csv
 import io
+from datetime import datetime
 
 mapping_bp = Blueprint("mapping", __name__, url_prefix="/mapping", template_folder="templates")
 
@@ -73,8 +75,16 @@ def export_csv():
     writer = csv.DictWriter(buf, fieldnames=["uid", "nummer", "created_at"])
     writer.writeheader()
     writer.writerows(rows)
-    return Response(buf.getvalue(), mimetype="text/csv",
-                     headers={"Content-Disposition": "attachment; filename=mapping.csv"})
+    
+    # Individueller Dateiname mit Zeitstempel
+    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"mapping_{ts_str}.csv"
+    
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @mapping_bp.route("/api/import_csv", methods=["POST"])
 def import_csv():

@@ -9,7 +9,6 @@ const slowValLabel = document.getElementById('slowval');
 const fastInputField = document.getElementById('fastInput');
 const slowInputField = document.getElementById('slowInput');
 
-// Direkte PWM-Steuerung
 const servoDirectUsInput = document.getElementById('servoDirectUs');
 const servoDirectAngleCalc = document.getElementById('servoDirectAngleCalc');
 
@@ -19,22 +18,11 @@ let motorDebounceTimer = null;
 let servoTypeTimer = null;
 let ignoreStatusPwmUntil = 0;
 
-// Kalibrierte 3-Punkt-Basis (Default)
 let base45 = 2122;
 let base90 = 1600;
 let base135 = 1050;
-
-function updateCalculatedKicks() {
-  // 75° Kick Rechts: 45 + (30/45)*(90-45)
-  const kickR = Math.round(base45 + (30.0 / 45.0) * (base90 - base45));
-  // 105° Kick Links: 90 + (15/45)*(135-90)
-  const kickL = Math.round(base90 + (15.0 / 45.0) * (base135 - base90));
-
-  const elKickR = document.getElementById('calc_poskickr');
-  const elKickL = document.getElementById('calc_poskickl');
-  if (elKickR) elKickR.textContent = kickR;
-  if (elKickL) elKickL.textContent = kickL;
-}
+let degKickL = 105.0;
+let degKickR = 75.0;
 
 function angleToUs(deg) {
   if (deg <= 45.0) return base45;
@@ -58,6 +46,15 @@ function usToAngle(us) {
     const ratio = (us - base90) / (base135 - base90);
     return Math.round((90.0 + ratio * 45.0) * 10) / 10;
   }
+}
+
+function updateCalculatedKicks() {
+  const kickUsR = angleToUs(degKickR);
+  const kickUsL = angleToUs(degKickL);
+  const elKickR = document.getElementById('calc_poskickr');
+  const elKickL = document.getElementById('calc_poskickl');
+  if (elKickR) elKickR.textContent = kickUsR;
+  if (elKickL) elKickL.textContent = kickUsL;
 }
 
 function showStatusMessage(msg) {
@@ -111,7 +108,6 @@ async function setMotor(fast, slow) {
   if (slowValLabel) slowValLabel.textContent = slow;
   if (fastInputField) fastInputField.value = fast;
   if (slowInputField) slowInputField.value = slow;
-
   await fetch('/hardware/api/motor', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -120,10 +116,9 @@ async function setMotor(fast, slow) {
 }
 
 async function executeServoUs(us) {
-  us = Math.max(750, Math.min(2250, parseInt(us) || 1600));
+  us = Math.max(1000, Math.min(2170, parseInt(us) || 1600));
   if (servoDirectUsInput) servoDirectUsInput.value = us;
   if (servoDirectAngleCalc) servoDirectAngleCalc.textContent = usToAngle(us);
-
   await fetch('/hardware/api/servo_us', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -135,6 +130,8 @@ function fillCfgFields(cfg) {
   if (cfg.posrestl !== undefined) document.getElementById('in_posrestl').value = cfg.posrestl;
   if (cfg.posmid !== undefined) document.getElementById('in_posmid').value = cfg.posmid;
   if (cfg.posrestr !== undefined) document.getElementById('in_posrestr').value = cfg.posrestr;
+  if (cfg.degkickl !== undefined) document.getElementById('in_degkickl').value = Math.round(cfg.degkickl);
+  if (cfg.degkickr !== undefined) document.getElementById('in_degkickr').value = Math.round(cfg.degkickr);
   if (cfg.kdelay !== undefined) document.getElementById('in_kdelay').value = cfg.kdelay;
   if (cfg.khold !== undefined) document.getElementById('in_khold').value = cfg.khold;
   if (cfg.rhold !== undefined) document.getElementById('in_rhold').value = cfg.rhold;
@@ -161,6 +158,7 @@ async function poll() {
     setSensorBox('ls2', 'ls2box', d.ls2);
     document.getElementById('us1cm').textContent = (d.us1_cm !== null && d.us1_cm !== undefined) ? d.us1_cm.toFixed(1) : '-';
     document.getElementById('us2cm').textContent = (d.us2_cm !== null && d.us2_cm !== undefined) ? d.us2_cm.toFixed(1) : '-';
+
     document.getElementById('uid').textContent = d.last_uid;
     document.getElementById('servostate').textContent = d.servo_state;
     document.getElementById('nfcModeDisplay').textContent = d.nfcmode || '-';
@@ -193,15 +191,21 @@ async function poll() {
       if (d.cfg.posrestl) base45 = d.cfg.posrestl;
       if (d.cfg.posmid) base90 = d.cfg.posmid;
       if (d.cfg.posrestr) base135 = d.cfg.posrestr;
+      if (d.cfg.degkickl) degKickL = parseFloat(d.cfg.degkickl);
+      if (d.cfg.degkickr) degKickR = parseFloat(d.cfg.degkickr);
+
       updateCalculatedKicks();
 
       if (!cfgLoadedOnce) {
         fillCfgFields(d.cfg);
         cfgLoadedOnce = true;
       }
+
       document.getElementById('cur_posrestl').textContent = d.cfg.posrestl;
       document.getElementById('cur_posmid').textContent = d.cfg.posmid || base90;
       document.getElementById('cur_posrestr').textContent = d.cfg.posrestr;
+      document.getElementById('cur_degkickl').textContent = Math.round(d.cfg.degkickl || degKickL);
+      document.getElementById('cur_degkickr').textContent = Math.round(d.cfg.degkickr || degKickR);
       document.getElementById('cur_kdelay').textContent = d.cfg.kdelay;
       document.getElementById('cur_khold').textContent = d.cfg.khold;
       document.getElementById('cur_rhold').textContent = d.cfg.rhold;
@@ -246,7 +250,8 @@ slowSlider.addEventListener('change', () => {
   ignoreStatusPwmUntil = Date.now() + 1000;
 });
 
-document.getElementById('motorOnBtn').addEventListener('click', () => setMotor(255, 130));
+// Vorgabe: An (255 / 110)
+document.getElementById('motorOnBtn').addEventListener('click', () => setMotor(255, 110));
 document.getElementById('motorOffBtn').addEventListener('click', () => setMotor(0, 0));
 
 document.getElementById('motorInputApply').addEventListener('click', () => {
@@ -262,18 +267,15 @@ document.getElementById('servoAngleApply').addEventListener('click', async () =>
   showStatusMessage(angle + '° (' + us + ' µs) angefahren');
 });
 
-// Sofort-Senden bei Zahleneingabe (400ms Debounce fürs Eintippen vierstelliger Werte)
 servoDirectUsInput.addEventListener('input', () => {
   clearTimeout(servoTypeTimer);
   const raw = servoDirectUsInput.value;
   if (!raw || raw.length < 3) return;
-
   servoTypeTimer = setTimeout(() => {
     executeServoUs(parseInt(raw));
   }, 400);
 });
 
-// Schritt-Schaltflächen (+10, +1, -1, -10): Senden sofort
 document.querySelectorAll('.btn-step').forEach(btn => {
   btn.addEventListener('click', () => {
     clearTimeout(servoTypeTimer);
@@ -329,6 +331,7 @@ document.getElementById('nfcModeDuckBtn').addEventListener('click', async () => 
   });
 });
 
+// Reines, isoliertes Senden jedes Felds ohne Seiteneffekte auf Hold-Werte
 document.querySelectorAll('.tune').forEach(input => {
   let timer = null;
   input.addEventListener('input', () => {
@@ -341,6 +344,9 @@ document.querySelectorAll('.tune').forEach(input => {
       if (key === 'POSRESTL') base45 = parseInt(value);
       if (key === 'POSMID') base90 = parseInt(value);
       if (key === 'POSRESTR') base135 = parseInt(value);
+      if (key === 'DEGKICKL') degKickL = parseFloat(value);
+      if (key === 'DEGKICKR') degKickR = parseFloat(value);
+
       updateCalculatedKicks();
 
       await fetch('/hardware/api/config', {
@@ -362,15 +368,6 @@ document.getElementById('cfg_invert').addEventListener('change', async (e) => {
 document.getElementById('cfgRefreshBtn').addEventListener('click', async () => {
   cfgLoadedOnce = false;
   await fetch('/hardware/api/config_refresh', {method: 'POST'});
-});
-
-document.getElementById('batchSizeApply').addEventListener('click', async () => {
-  const size = document.getElementById('cfg_batchsize').value;
-  await fetch('/hardware/api/batch_size', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({size: size})
-  });
-  showStatusMessage('Kistengroesse auf ' + size + ' gesetzt.');
 });
 
 updateCalculatedKicks();

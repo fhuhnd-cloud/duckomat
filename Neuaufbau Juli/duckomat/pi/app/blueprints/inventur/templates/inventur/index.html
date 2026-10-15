@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Duckomat - Inventur{% endblock %}
+
 {% block content %}
 <h1>Inventur / Sortierung</h1>
 
@@ -10,8 +11,12 @@
     <label><input type="radio" name="startDir" value="LEFT" checked> Links</label>
     <label><input type="radio" name="startDir" value="RIGHT"> Rechts</label>
   </div>
-  <p class="hint">Der Klöppel faehrt beim Start automatisch auf die Ruheposition
-     DERSELBEN Seite wie die gewaehlte Startrichtung (z.B. bei "Links" auf Ruhe Links).</p>
+  <div class="control-row" style="margin-top: 14px;">
+    <label><strong>Kistengroesse (Enten pro Seitenwechsel):</strong></label>
+    <input type="number" id="in_batch_size" min="1" max="10000" style="width:80px;" value="100">
+    <button id="batchSizeApply">Uebernehmen</button>
+  </div>
+  <p class="hint">Der Kloeppel faehrt beim Start automatisch auf die Ruheposition DERSELBEN Seite wie die gewaehlte Startrichtung.</p>
 </section>
 
 <section class="panel">
@@ -22,15 +27,15 @@
     <button id="resetBtn">Session zuruecksetzen</button>
   </div>
   <p>Status: <strong id="runningState">-</strong></p>
-  <p>Aktuelle Auswurf-Seite: <strong id="direction">-</strong> (Kiste: <span id="batch">0</span> / <span id="batchSize">100</span> - kann jederzeit gewechselt werden)</p>
+  <p>Aktuelle Auswurf-Seite: <strong id="direction">-</strong> (Kiste: <span id="batch">0</span> / <span id="batchSize">100</span>)</p>
   <p>NFC-Reader: <strong id="nfcReady">-</strong> &nbsp; Verbindung: <strong id="conn">-</strong></p>
-  <p class="hint">Start/Stop steuern die Foerderbaender automatisch: Start = 255/130, Stop = 0/0.</p>
+  <p class="hint">Start/Stop steuern die Foerderbaender automatisch: Start = 255/110, Stop = 0/0.</p>
 </section>
 
 <section class="panel">
-  <h2>Förderbänder (manuelle Feinjustierung)</h2>
+  <h2>Foerderbaender (manuelle Feinjustierung)</h2>
   <div class="control-row">
-    <button id="motorOnBtn" style="background:#27ae60;">An (255 / 130)</button>
+    <button id="motorOnBtn" style="background:#27ae60;">An (255 / 110)</button>
     <button id="motorOffBtn" style="background:#c0392b;">Aus (0 / 0)</button>
   </div>
   <div class="control-row">
@@ -57,6 +62,7 @@
     <button id="rejectStopSizeApply">Uebernehmen</button>
   </div>
   <p>Durchgelassen seit letztem Stopp: <span id="rejectBatchCount">0</span> / <span id="rejectStopSize">100</span></p>
+
   <div id="rejectPausePanel" style="display:none; background:#fff3cd; padding:10px; border-radius:8px;">
     <p><strong>Grenze erreicht - Baender werden angehalten</strong> (vorderes Band sofort, hinteres nach 2s Nachlauf).</p>
     <button id="resumeRejectsBtn">Weiter (Zaehler zuruecksetzen, Motoren manuell neu starten)</button>

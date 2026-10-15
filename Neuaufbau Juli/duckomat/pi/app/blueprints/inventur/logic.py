@@ -8,7 +8,7 @@ class SortingSession:
     REJECT_STOP_SIZE = 100
     MOTOR_STOP_DELAY_S = 2.0
     DEFAULT_FAST_PWM = 255
-    DEFAULT_SLOW_PWM = 130
+    DEFAULT_SLOW_PWM = 110  # Standard-PWM Einzugsband = 110
 
     def __init__(self, controller):
         self.controller = controller
@@ -39,6 +39,12 @@ class SortingSession:
             self.batch_count = 0
         return True
 
+    def set_batch_size(self, size):
+        with self.lock:
+            self.BATCH_SIZE = max(1, int(size))
+            self.batch_count = 0
+        self.controller.send_config("BATCHSIZE", self.BATCH_SIZE)
+
     def _preposition_servo(self):
         cfg = self.controller.get_state().get("cfg") or {}
         if self.current_direction == "LEFT":
@@ -52,25 +58,23 @@ class SortingSession:
             self.running = True
             self.paused_for_rejects = False
             self.batch_count = 0
+            if self.current_direction not in ("LEFT", "RIGHT"):
+                self.current_direction = "LEFT"
+            side_letter = "L" if self.current_direction == "LEFT" else "R"
 
-        # Vor dem Start Klöppel auf Startseite
         self._preposition_servo()
         self.controller.send_nfcmode("DUCKONLY")
-
-        # Kistengröße und Start-Seite autonom an den Nano übergeben!
+        # Kistengröße an Nano synchronisieren
         self.controller.send_config("BATCHSIZE", self.BATCH_SIZE)
-        side_letter = "L" if self.start_direction == "LEFT" else "R"
-        self.controller.send_arm(side_letter)
-
-        # Motoren starten
-        self.controller.send_motor(self._last_fast_pwm, self._last_slow_pwm)
+        self.controller.send_arm(side_letter, switch=False)
         self.controller.send_motor(self._last_fast_pwm, self._last_slow_pwm)
 
     def stop(self):
         with self.lock:
             self.running = False
             self.paused_for_rejects = False
-            self.controller.send_arm("N")
+
+        self.controller.send_arm("N")
         self.controller.send_nfcmode("CONTINUOUS")
         self.controller.send_motor(0, 0)
 
@@ -84,6 +88,7 @@ class SortingSession:
             self.reject_batch_count = 0
             self.log = []
             self.paused_for_rejects = False
+
         self._preposition_servo()
 
     def set_stop_on_rejects(self, enabled):
@@ -155,7 +160,6 @@ class SortingSession:
                 self.session_rejected += 1
                 self.reject_batch_count += 1
 
-            # UI-Synchronisation: Seite für die Anzeige anpassen
             if self.batch_count >= self.BATCH_SIZE:
                 self.batch_count = 0
                 self.current_direction = "RIGHT" if self.current_direction == "LEFT" else "LEFT"

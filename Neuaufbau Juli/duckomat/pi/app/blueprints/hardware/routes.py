@@ -30,8 +30,8 @@ def motor():
 @hardware_bp.route("/api/servo_us", methods=["POST"])
 def servo_us():
     data = request.get_json(force=True)
-    us = int(data.get("us", 1510))
-    us = max(750, min(2250, us))
+    us = int(data.get("us", 1600))
+    us = max(1000, min(2170, us))
     controller().send_servo_us(us)
     return jsonify({"ok": True, "us": us})
 
@@ -43,9 +43,10 @@ def simtag():
 
 ALLOWED_CONFIG_KEYS = {
     "POSRESTL", "POSMID", "POSRESTR",
+    "DEGKICKL", "DEGKICKR",
     "KDELAY", "KHOLD", "RHOLD", "RHOLDSW", "INVERT",
     "USTHRESHMM", "USCONFIRM", "USINTERVAL",
-    "NFCTIMEOUT", "NFCRETRIES"
+    "NFCTIMEOUT", "NFCRETRIES", "BATCHSIZE"
 }
 
 @hardware_bp.route("/api/config", methods=["POST"])
@@ -61,15 +62,6 @@ def set_config():
 @hardware_bp.route("/api/config_refresh", methods=["POST"])
 def config_refresh():
     controller().request_cfg()
-    return jsonify({"ok": True})
-
-@hardware_bp.route("/api/batch_size", methods=["POST"])
-def set_batch_size():
-    data = request.get_json(force=True)
-    size = int(data.get("size", 100))
-    if size < 1 or size > 100000:
-        return jsonify({"ok": False, "error": "invalid size"}), 400
-    current_app.sorting_session.BATCH_SIZE = size
     return jsonify({"ok": True})
 
 @hardware_bp.route("/api/dev_mode", methods=["POST"])

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Duckomat - Hardware{% endblock %}
+
 {% block content %}
 <h1>Hardware Test & Debug</h1>
 
@@ -25,7 +26,7 @@
 <section class="panel">
   <h2>Motoren (PWM 0-255)</h2>
   <div class="control-row">
-    <button id="motorOnBtn" style="background:#27ae60;">An (255 / 130)</button>
+    <button id="motorOnBtn" style="background:#27ae60;">An (255 / 110)</button>
     <button id="motorOffBtn" style="background:#c0392b;">Aus (0 / 0)</button>
   </div>
   <div class="control-row">
@@ -63,14 +64,12 @@
   <p class="hint">Schaltet Simulationsfelder, Direkt-PWM und Kalibrier-Tuning sichtbar.</p>
 
   <div id="devPanel" style="display:none;">
-
     <h3>Servo PWM-Direkteingabe (&micro;s Feintuning)</h3>
     <div class="control-row" style="gap:8px;">
       <label>Pulsbreite:</label>
-      <input type="number" id="servoDirectUs" min="750" max="2250" step="1" value="1510" style="width:95px; font-weight:bold; font-size:1.1em; text-align:center;">
+      <input type="number" id="servoDirectUs" min="1000" max="2170" step="1" value="1600" style="width:95px; font-weight:bold; font-size:1.1em; text-align:center;">
       <span>&micro;s</span>
       <span style="color:#7f8c8d;">(&asymp; <strong id="servoDirectAngleCalc">90.0</strong>&deg;)</span>
-
       <button type="button" class="btn-step" data-step="-10" style="background:#57606f; padding:6px 10px;">-10</button>
       <button type="button" class="btn-step" data-step="-1" style="background:#57606f; padding:6px 10px;">-1</button>
       <button type="button" class="btn-step" data-step="1" style="background:#57606f; padding:6px 10px;">+1</button>
@@ -86,8 +85,8 @@
 
     <h3>Schnelltests</h3>
     <div class="control-row">
-      <button id="testKickLBtn">Test-Kick Links (105&deg;)</button>
-      <button id="testKickRBtn">Test-Kick Rechts (75&deg;)</button>
+      <button id="testKickLBtn">Test-Kick Links</button>
+      <button id="testKickRBtn">Test-Kick Rechts</button>
     </div>
     <div class="control-row">
       <label>NFC-Modus:</label>
@@ -96,34 +95,35 @@
       <span>Aktuell: <strong id="nfcModeDisplay">-</strong></span>
     </div>
 
-    <h3>Winkel-Kalibrierung (3-Punkt-Basis) & Live-Tuning</h3>
-    <p class="hint">Trage hier die exakt ausgemessenen Werte f&uuml;r 45&deg;, 90&deg; und 135&deg; ein. Die Kick-Positionen f&uuml;r 75&deg; und 105&deg; werden daraus automatisch berechnet.</p>
-
+    <h3>Winkel-Kalibrierung & Live-Tuning</h3>
+    <p class="hint">Trage hier die Basis-Ruhelagen in &micro;s und die gewuenschten Kick-Winkel direkt in Grad (&deg;) ein. Die Hold-Zeiten passen sich bei Winkel-Aenderungen automatisch an und koennen jederzeit manuell ueberschrieben werden.</p>
     <table>
       <thead><tr><th>Parameter</th><th>Aktueller Wert</th><th>Neuer Wert</th></tr></thead>
       <tbody>
         <tr>
-          <td><strong>Servo Ruhe Links (POSRESTL, 45&deg;)</strong></td>
+          <td>Servo Ruhe Links (POSRESTL, 45&deg;)</td>
           <td><span id="cur_posrestl">-</span> &micro;s</td>
           <td><input type="number" class="tune" data-key="POSRESTL" id="in_posrestl" style="width:85px;"></td>
         </tr>
         <tr>
-          <td><strong>Servo Mitte / Neutral (POSMID, 90&deg;)</strong></td>
+          <td>Servo Mitte / Neutral (POSMID, 90&deg;)</td>
           <td><span id="cur_posmid">-</span> &micro;s</td>
           <td><input type="number" class="tune" data-key="POSMID" id="in_posmid" style="width:85px;"></td>
         </tr>
         <tr>
-          <td><strong>Servo Ruhe Rechts (POSRESTR, 135&deg;)</strong></td>
+          <td>Servo Ruhe Rechts (POSRESTR, 135&deg;)</td>
           <td><span id="cur_posrestr">-</span> &micro;s</td>
           <td><input type="number" class="tune" data-key="POSRESTR" id="in_posrestr" style="width:85px;"></td>
         </tr>
-        <tr style="color:#7f8c8d; font-size:0.9em; background:#f9f9f9;">
-          <td><em>Berechneter Kick Rechts (75&deg;)</em></td>
-          <td colspan="2"><span id="calc_poskickr">-</span> &micro;s</td>
+        <tr>
+          <td>Kick-Winkel Links (&deg;) (DEGKICKL)</td>
+          <td><span id="cur_degkickl">-</span> &deg; (&asymp; <span id="calc_poskickl">-</span> &micro;s)</td>
+          <td><input type="number" step="1" class="tune" data-key="DEGKICKL" id="in_degkickl" style="width:85px;"></td>
         </tr>
-        <tr style="color:#7f8c8d; font-size:0.9em; background:#f9f9f9;">
-          <td><em>Berechneter Kick Links (105&deg;)</em></td>
-          <td colspan="2"><span id="calc_poskickl">-</span> &micro;s</td>
+        <tr>
+          <td>Kick-Winkel Rechts (&deg;) (DEGKICKR)</td>
+          <td><span id="cur_degkickr">-</span> &deg; (&asymp; <span id="calc_poskickr">-</span> &micro;s)</td>
+          <td><input type="number" step="1" class="tune" data-key="DEGKICKR" id="in_degkickr" style="width:85px;"></td>
         </tr>
         <tr>
           <td>Kloeppel-Delay: LS2 bis Kick (KDELAY), ms</td>
@@ -165,11 +165,6 @@
 
     <div class="control-row">
       <label><input type="checkbox" id="cfg_invert"> Lesbar/Unlesbar-Logik invertieren (Debug)</label>
-    </div>
-    <div class="control-row">
-      <label>Kistengroesse (Enten pro Seitenwechsel)</label>
-      <input type="number" id="cfg_batchsize" min="1" style="width:100px;" value="100">
-      <button id="batchSizeApply">Uebernehmen</button>
     </div>
     <div class="control-row">
       <button id="cfgRefreshBtn">Aktuelle Werte vom Nano neu laden</button>

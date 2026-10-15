@@ -29,6 +29,7 @@ async function setMotor(fast, slow) {
 async function pollHardwareStatus() {
   const r = await fetch('/hardware/api/status');
   const d = await r.json();
+
   document.getElementById('simPanel').style.display = d.dev_mode ? 'block' : 'none';
   document.getElementById('conn').textContent = d.connected ? "Verbunden" : "Getrennt";
   document.getElementById('nfcReady').textContent =
@@ -53,6 +54,7 @@ async function pollHardwareStatus() {
 async function poll() {
   const r = await fetch('/inventur/api/status');
   const d = await r.json();
+
   pollHardwareStatus();
 
   document.getElementById('runningState').textContent = d.running ? "LAEUFT" : "GESTOPPT";
@@ -65,6 +67,10 @@ async function poll() {
   document.getElementById('rejectBatchCount').textContent = d.reject_batch_count;
   document.getElementById('rejectStopSize').textContent = d.reject_stop_size;
 
+  if (document.activeElement !== document.getElementById('in_batch_size')) {
+    document.getElementById('in_batch_size').value = d.batch_size;
+  }
+
   if (!stopOnRejectsDirty) {
     document.getElementById('stopOnRejectsCheck').checked = d.stop_on_rejects;
   }
@@ -73,6 +79,7 @@ async function poll() {
       r.checked = (r.value === d.start_direction);
     });
   }
+
   document.getElementById('rejectPausePanel').style.display = d.paused_for_rejects ? 'block' : 'none';
 
   const tbody = document.querySelector('#logTable tbody');
@@ -96,7 +103,8 @@ document.querySelectorAll('input[name="startDir"]').forEach(radio => {
   });
 });
 
-document.getElementById('motorOnBtn').addEventListener('click', () => setMotor(255, 130));
+// Vorgabe: An (255 / 110)
+document.getElementById('motorOnBtn').addEventListener('click', () => setMotor(255, 110));
 document.getElementById('motorOffBtn').addEventListener('click', () => setMotor(0, 0));
 
 document.getElementById('motorInputApply').addEventListener('click', () => {
@@ -105,16 +113,26 @@ document.getElementById('motorInputApply').addEventListener('click', () => {
   setMotor(fast, slow);
 });
 
+document.getElementById('batchSizeApply').addEventListener('click', async () => {
+  const size = parseInt(document.getElementById('in_batch_size').value) || 100;
+  await fetch('/inventur/api/batch_size', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({size: size})
+  });
+});
+
 fastSlider.addEventListener('input', () => {
   fastSlider.dataset.dragging = "1";
   document.getElementById('fastval').textContent = fastSlider.value;
   sendMotorDebounced();
 });
+
 slowSlider.addEventListener('input', () => {
   slowSlider.dataset.dragging = "1";
   document.getElementById('slowval').textContent = slowSlider.value;
   sendMotorDebounced();
 });
+
 fastSlider.addEventListener('change', () => { fastSlider.dataset.dragging = ""; });
 slowSlider.addEventListener('change', () => { slowSlider.dataset.dragging = ""; });
 

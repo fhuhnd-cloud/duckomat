@@ -132,13 +132,23 @@ function fillCfgFields(cfg) {
   if (cfg.posrestr !== undefined) document.getElementById('in_posrestr').value = cfg.posrestr;
   if (cfg.degkickl !== undefined) document.getElementById('in_degkickl').value = Math.round(cfg.degkickl);
   if (cfg.degkickr !== undefined) document.getElementById('in_degkickr').value = Math.round(cfg.degkickr);
+  
   if (cfg.kdelay !== undefined) document.getElementById('in_kdelay').value = cfg.kdelay;
   if (cfg.khold !== undefined) document.getElementById('in_khold').value = cfg.khold;
   if (cfg.rhold !== undefined) document.getElementById('in_rhold').value = cfg.rhold;
   if (cfg.rholdswitch !== undefined) document.getElementById('in_rholdswitch').value = cfg.rholdswitch;
+  
+  if (cfg.nfcpoll !== undefined) document.getElementById('in_nfcpoll').value = cfg.nfcpoll;
+  if (cfg.uidage !== undefined) document.getElementById('in_uidage').value = cfg.uidage;
+  if (cfg.cooldown !== undefined) document.getElementById('in_cooldown').value = cfg.cooldown;
+  if (cfg.nfctimeout !== undefined) document.getElementById('in_nfctimeout').value = cfg.nfctimeout;
+  if (cfg.nfcretries !== undefined) document.getElementById('in_nfcretries').value = cfg.nfcretries;
+  
   if (cfg.usthreshmm !== undefined) document.getElementById('in_usthreshmm').value = cfg.usthreshmm;
   if (cfg.usconfirm !== undefined) document.getElementById('in_usconfirm').value = cfg.usconfirm;
   if (cfg.usinterval !== undefined) document.getElementById('in_usinterval').value = cfg.usinterval;
+  if (cfg.maxblockms !== undefined) document.getElementById('in_maxblockms').value = cfg.maxblockms;
+  
   if (cfg.invert !== undefined) document.getElementById('cfg_invert').checked = cfg.invert;
 }
 
@@ -154,14 +164,11 @@ async function poll() {
     document.getElementById('nfcReady').textContent =
       d.nfc_ready === true ? "Bereit" : (d.nfc_ready === false ? "Nicht bereit" : "-");
 
-    setSensorBox('ls1', 'ls1box', d.ls1);
     setSensorBox('ls2', 'ls2box', d.ls2);
-    document.getElementById('us1cm').textContent = (d.us1_cm !== null && d.us1_cm !== undefined) ? d.us1_cm.toFixed(1) : '-';
     document.getElementById('us2cm').textContent = (d.us2_cm !== null && d.us2_cm !== undefined) ? d.us2_cm.toFixed(1) : '-';
 
     document.getElementById('uid').textContent = d.last_uid;
     document.getElementById('servostate').textContent = d.servo_state;
-    document.getElementById('nfcModeDisplay').textContent = d.nfcmode || '-';
 
     const now = Date.now();
     if (now > ignoreStatusPwmUntil && !fastSlider.dataset.dragging) {
@@ -206,13 +213,22 @@ async function poll() {
       document.getElementById('cur_posrestr').textContent = d.cfg.posrestr;
       document.getElementById('cur_degkickl').textContent = Math.round(d.cfg.degkickl || degKickL);
       document.getElementById('cur_degkickr').textContent = Math.round(d.cfg.degkickr || degKickR);
+      
       document.getElementById('cur_kdelay').textContent = d.cfg.kdelay;
       document.getElementById('cur_khold').textContent = d.cfg.khold;
       document.getElementById('cur_rhold').textContent = d.cfg.rhold;
       document.getElementById('cur_rholdswitch').textContent = d.cfg.rholdswitch;
+
+      document.getElementById('cur_nfcpoll').textContent = d.cfg.nfcpoll;
+      document.getElementById('cur_uidage').textContent = d.cfg.uidage;
+      document.getElementById('cur_cooldown').textContent = d.cfg.cooldown;
+      document.getElementById('cur_nfctimeout').textContent = d.cfg.nfctimeout;
+      document.getElementById('cur_nfcretries').textContent = d.cfg.nfcretries;
+
       document.getElementById('cur_usthreshmm').textContent = d.cfg.usthreshmm;
       document.getElementById('cur_usconfirm').textContent = d.cfg.usconfirm;
       document.getElementById('cur_usinterval').textContent = d.cfg.usinterval;
+      document.getElementById('cur_maxblockms').textContent = d.cfg.maxblockms;
     }
 
     const rawLog = document.getElementById('rawLog');
@@ -250,7 +266,6 @@ slowSlider.addEventListener('change', () => {
   ignoreStatusPwmUntil = Date.now() + 1000;
 });
 
-// Vorgabe: An (255 / 110)
 document.getElementById('motorOnBtn').addEventListener('click', () => setMotor(255, 110));
 document.getElementById('motorOffBtn').addEventListener('click', () => setMotor(0, 0));
 
@@ -317,21 +332,6 @@ document.getElementById('testKickRBtn').addEventListener('click', async () => {
   });
 });
 
-document.getElementById('nfcModeContBtn').addEventListener('click', async () => {
-  await fetch('/hardware/api/nfcmode', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({mode: 'CONTINUOUS'})
-  });
-});
-
-document.getElementById('nfcModeDuckBtn').addEventListener('click', async () => {
-  await fetch('/hardware/api/nfcmode', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({mode: 'DUCKONLY'})
-  });
-});
-
-// Reines, isoliertes Senden jedes Felds ohne Seiteneffekte auf Hold-Werte
 document.querySelectorAll('.tune').forEach(input => {
   let timer = null;
   input.addEventListener('input', () => {

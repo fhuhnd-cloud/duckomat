@@ -8,7 +8,7 @@ class SortingSession:
     REJECT_STOP_SIZE = 100
     MOTOR_STOP_DELAY_S = 2.0
     DEFAULT_FAST_PWM = 255
-    DEFAULT_SLOW_PWM = 110  # Standard-PWM Einzugsband = 110
+    DEFAULT_SLOW_PWM = 110
 
     def __init__(self, controller):
         self.controller = controller
@@ -26,7 +26,9 @@ class SortingSession:
         self.paused_for_rejects = False
         self._last_fast_pwm = self.DEFAULT_FAST_PWM
         self._last_slow_pwm = self.DEFAULT_SLOW_PWM
+        
         self._stop_timer = None
+        self._watchdog_thread = None
         controller.add_listener(self._on_event)
 
     def set_start_direction(self, direction):
@@ -62,12 +64,51 @@ class SortingSession:
                 self.current_direction = "LEFT"
             side_letter = "L" if self.current_direction == "LEFT" else "R"
 
+            if self._last_fast_pwm < 50:
+                self._last_fast_pwm = self.DEFAULT_FAST_PWM
+            if self._last_slow_pwm < 50:
+                self._last_slow_pwm = self.DEFAULT_SLOW_PWM
+
+        # 100ms Pausen verhindern Buffer Overflows auf dem Nano beim Start
         self._preposition_servo()
-        self.controller.send_nfcmode("DUCKONLY")
-        # Kistengröße an Nano synchronisieren
+        time.sleep(0.1)
+        self.controller.send_nfcmode("CONTINUOUS")
+        time.sleep(0.1)
         self.controller.send_config("BATCHSIZE", self.BATCH_SIZE)
+        time.sleep(0.1)
         self.controller.send_arm(side_letter, switch=False)
+        time.sleep(0.1)
         self.controller.send_motor(self._last_fast_pwm, self._last_slow_pwm)
+
+        # Watchdog starten, um unfreiwillige Motor-Stopps automatisch zu heilen
+        if self._watchdog_thread is None or not self._watchdog_thread.is_alive():
+            self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+            self._watchdog_thread.start()
+
+    def _watchdog_loop(self):
+        while self.running:
+            time.sleep(1.5)
+            with self.lock:
+                if not self.running or self.paused_for_rejects:
+                    continue
+                current_fast = self._last_fast_pwm
+                current_slow = self._last_slow_pwm
+                current_side = "L" if self.current_direction == "LEFT" else "R"
+                
+            state = self.controller.get_state()
+            conn = state.get("connected", False)
+            fast_val = int(state.get("fast", 0))
+            
+            # Falls der Motor ploetzlich steht, obwohl die Session als "running" markiert ist
+            if conn and fast_val == 0 and current_fast > 0:
+                print("\n[Auto-Recovery] Unfreiwilliger Bandstopp erkannt! Heile Session automatisch...\n")
+                self.controller.send_nfcmode("CONTINUOUS")
+                time.sleep(0.1)
+                self.controller.send_config("BATCHSIZE", self.BATCH_SIZE)
+                time.sleep(0.1)
+                self.controller.send_arm(current_side, switch=False)
+                time.sleep(0.1)
+                self.controller.send_motor(current_fast, current_slow)
 
     def stop(self):
         with self.lock:
@@ -75,7 +116,9 @@ class SortingSession:
             self.paused_for_rejects = False
 
         self.controller.send_arm("N")
+        time.sleep(0.1)
         self.controller.send_nfcmode("CONTINUOUS")
+        time.sleep(0.1)
         self.controller.send_motor(0, 0)
 
     def reset_session(self):

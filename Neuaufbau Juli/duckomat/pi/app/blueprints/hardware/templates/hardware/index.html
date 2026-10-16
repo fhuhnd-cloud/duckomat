@@ -16,9 +16,8 @@
 </section>
 
 <section class="panel">
-  <h2>Sensoren (Ultraschall)</h2>
-  <div class="box sensor" id="ls1box">Sensor 1 (vorne)<br><span id="ls1">-</span><br><small><span id="us1cm">-</span> cm</small></div>
-  <div class="box sensor" id="ls2box">Sensor 2 (hinten)<br><span id="ls2">-</span><br><small><span id="us2cm">-</span> cm</small></div>
+  <h2>Sensoren</h2>
+  <div class="box sensor" id="ls2box">Ultraschallsensor (vor dem Kloeppel)<br><span id="ls2">-</span><br><small><span id="us2cm">-</span> cm</small></div>
   <div class="box sensor">NFC UID (live)<br><span id="uid">-</span></div>
   <div class="box sensor">Servo<br><span id="servostate">-</span></div>
 </section>
@@ -61,7 +60,7 @@
   <div class="control-row">
     <label><input type="checkbox" id="devModeToggle"> Entwicklermodus aktivieren</label>
   </div>
-  <p class="hint">Schaltet Simulationsfelder, Direkt-PWM und Kalibrier-Tuning sichtbar.</p>
+  <p class="hint">Schaltet Simulationsfelder, Direkt-PWM und detailliertes Parameter-Tuning frei.</p>
 
   <div id="devPanel" style="display:none;">
     <h3>Servo PWM-Direkteingabe (&micro;s Feintuning)</h3>
@@ -88,77 +87,119 @@
       <button id="testKickLBtn">Test-Kick Links</button>
       <button id="testKickRBtn">Test-Kick Rechts</button>
     </div>
-    <div class="control-row">
-      <label>NFC-Modus:</label>
-      <button id="nfcModeContBtn">CONTINUOUS</button>
-      <button id="nfcModeDuckBtn">DUCKONLY</button>
-      <span>Aktuell: <strong id="nfcModeDisplay">-</strong></span>
-    </div>
 
-    <h3>Winkel-Kalibrierung & Live-Tuning</h3>
-    <p class="hint">Trage hier die Basis-Ruhelagen in &micro;s und die gewuenschten Kick-Winkel direkt in Grad (&deg;) ein. Die Hold-Zeiten passen sich bei Winkel-Aenderungen automatisch an und koennen jederzeit manuell ueberschrieben werden.</p>
+    <h3>Live-Tuning: Servo Parameter</h3>
+    <p class="hint"><strong>KDELAY (Wartezeit):</strong> Zeit, die der Kloeppel nach Sensorerfassung noch wartet. Verringern (z.B. auf 200 ms), wenn der Kloeppel zu spaet zuschlaegt und die Ente schon weg ist.</p>
     <table>
       <thead><tr><th>Parameter</th><th>Aktueller Wert</th><th>Neuer Wert</th></tr></thead>
       <tbody>
         <tr>
-          <td>Servo Ruhe Links (POSRESTL, 45&deg;)</td>
+          <td>Servo Ruhe Links (POSRESTL, 45&deg;)<br><small>Basis-Anschlag in &micro;s</small></td>
           <td><span id="cur_posrestl">-</span> &micro;s</td>
           <td><input type="number" class="tune" data-key="POSRESTL" id="in_posrestl" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Servo Mitte / Neutral (POSMID, 90&deg;)</td>
+          <td>Servo Mitte / Neutral (POSMID, 90&deg;)<br><small>Mittelstellung in &micro;s</small></td>
           <td><span id="cur_posmid">-</span> &micro;s</td>
           <td><input type="number" class="tune" data-key="POSMID" id="in_posmid" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Servo Ruhe Rechts (POSRESTR, 135&deg;)</td>
+          <td>Servo Ruhe Rechts (POSRESTR, 135&deg;)<br><small>Basis-Anschlag in &micro;s</small></td>
           <td><span id="cur_posrestr">-</span> &micro;s</td>
           <td><input type="number" class="tune" data-key="POSRESTR" id="in_posrestr" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Kick-Winkel Links (&deg;) (DEGKICKL)</td>
-          <td><span id="cur_degkickl">-</span> &deg; (&asymp; <span id="calc_poskickl">-</span> &micro;s)</td>
+          <td>Kick-Winkel Links (&deg;) (DEGKICKL)<br><small>Ausschlag nach links in Grad (z.B. 105&deg;)</small></td>
+          <td><span id="cur_degkickl">-</span> &deg; <small>(&asymp; <span id="calc_poskickl">-</span> &micro;s)</small></td>
           <td><input type="number" step="1" class="tune" data-key="DEGKICKL" id="in_degkickl" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Kick-Winkel Rechts (&deg;) (DEGKICKR)</td>
-          <td><span id="cur_degkickr">-</span> &deg; (&asymp; <span id="calc_poskickr">-</span> &micro;s)</td>
+          <td>Kick-Winkel Rechts (&deg;) (DEGKICKR)<br><small>Ausschlag nach rechts in Grad (z.B. 75&deg;)</small></td>
+          <td><span id="cur_degkickr">-</span> &deg; <small>(&asymp; <span id="calc_poskickr">-</span> &micro;s)</small></td>
           <td><input type="number" step="1" class="tune" data-key="DEGKICKR" id="in_degkickr" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Kloeppel-Delay: LS2 bis Kick (KDELAY), ms</td>
+          <td>Kloeppel-Delay (KDELAY), ms<br><small>Wartezeit zwischen US2-Ausloesung und Start des Kicks</small></td>
           <td><span id="cur_kdelay">-</span></td>
           <td><input type="number" class="tune" data-key="KDELAY" id="in_kdelay" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Kick-Halten (KHOLD), ms</td>
+          <td>Kick-Halten (KHOLD), ms<br><small>Ausfahr- &amp; Haltezeit im ausgefahrenen Zustand</small></td>
           <td><span id="cur_khold">-</span></td>
           <td><input type="number" class="tune" data-key="KHOLD" id="in_khold" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Rueckkehr-Halten normal (RHOLD), ms</td>
+          <td>Rueckkehr-Halten normal (RHOLD), ms<br><small>Dauer fuer den Rueckzug auf die gleiche Seite</small></td>
           <td><span id="cur_rhold">-</span></td>
           <td><input type="number" class="tune" data-key="RHOLD" id="in_rhold" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Rueckkehr-Halten bei Seitenwechsel (RHOLDSW), ms</td>
+          <td>Rueckkehr-Halten bei Seitenwechsel (RHOLDSW), ms<br><small>Dauer fuer den Durchfahrts-Schwenk auf die Gegenseite</small></td>
           <td><span id="cur_rholdswitch">-</span></td>
           <td><input type="number" class="tune" data-key="RHOLDSW" id="in_rholdswitch" style="width:85px;"></td>
         </tr>
+      </tbody>
+    </table>
+
+    <br>
+    <h3>Live-Tuning: NFC Reader</h3>
+    <p class="hint"><strong>UIDAGE:</strong> Wie lange eine gelesene Ente als "erkannt" im Puffer verbleibt, bevor sie den Sensor US2 erreichen muss.</p>
+    <table>
+      <thead><tr><th>Parameter</th><th>Aktueller Wert</th><th>Neuer Wert</th></tr></thead>
+      <tbody>
         <tr>
-          <td>Ultraschall Blockiert-Schwelle (USTHRESHMM), mm</td>
+          <td>NFC Leerlauf Polling Pause (NFCPOLL), ms<br><small>Wartezeit zwischen NFC Lesezyklen (sollte bei 0 bleiben fuer maximale Frequenz)</small></td>
+          <td><span id="cur_nfcpoll">-</span></td>
+          <td><input type="number" class="tune" data-key="NFCPOLL" id="in_nfcpoll" style="width:85px;"></td>
+        </tr>
+        <tr>
+          <td>Gueltigkeit der UID (UIDAGE), ms<br><small>Lebensdauer einer UID im Puffer (z.B. 3500)</small></td>
+          <td><span id="cur_uidage">-</span></td>
+          <td><input type="number" class="tune" data-key="UIDAGE" id="in_uidage" style="width:85px;"></td>
+        </tr>
+        <tr>
+          <td>NFC Hardware Timeout (NFCTIMEOUT), ms<br><small>I2C Blockierungs-Timeout</small></td>
+          <td><span id="cur_nfctimeout">-</span></td>
+          <td><input type="number" class="tune" data-key="NFCTIMEOUT" id="in_nfctimeout" style="width:85px;"></td>
+        </tr>
+        <tr>
+          <td>NFC Retries (NFCRETRIES)<br><small>Fehler-Wiederholungen</small></td>
+          <td><span id="cur_nfcretries">-</span></td>
+          <td><input type="number" class="tune" data-key="NFCRETRIES" id="in_nfcretries" style="width:85px;"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <br>
+    <h3>Live-Tuning: Ultraschall (US2)</h3>
+    <p class="hint"><strong>COOLDOWN:</strong> Entprellung nach einer Erfassung, um flatternde Flanken am Enten-Heck zu unterdruecken.</p>
+    <table>
+      <thead><tr><th>Parameter</th><th>Aktueller Wert</th><th>Neuer Wert</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Blockiert-Schwelle (USTHRESHMM), mm<br><small>Distanz in Millimetern fuer das Ausloesen</small></td>
           <td><span id="cur_usthreshmm">-</span></td>
           <td><input type="number" class="tune" data-key="USTHRESHMM" id="in_usthreshmm" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Ultraschall Bestaetigungen Duck-Logik (USCONFIRM)</td>
+          <td>Bestaetigungen (USCONFIRM)<br><small>Anzahl der aufeinanderfolgenden Messungen unter dem Limit</small></td>
           <td><span id="cur_usconfirm">-</span></td>
           <td><input type="number" class="tune" data-key="USCONFIRM" id="in_usconfirm" style="width:85px;"></td>
         </tr>
         <tr>
-          <td>Ultraschall Messintervall (USINTERVAL), ms</td>
+          <td>Sensor Cooldown (COOLDOWN), ms<br><small>Totzeit nach Ausloesen zur Verhinderung von Mehrfachtriggern</small></td>
+          <td><span id="cur_cooldown">-</span></td>
+          <td><input type="number" class="tune" data-key="COOLDOWN" id="in_cooldown" style="width:85px;"></td>
+        </tr>
+        <tr>
+          <td>Messintervall (USINTERVAL), ms<br><small>Pausenzeit zwischen Ping-Abfragen</small></td>
           <td><span id="cur_usinterval">-</span></td>
           <td><input type="number" class="tune" data-key="USINTERVAL" id="in_usinterval" style="width:85px;"></td>
+        </tr>
+        <tr>
+          <td>Einklemmschutz Blockade Limit (MAXBLOCKMS), ms<br><small>Dauer einer dauerhaften Blockade, bevor ein Notaus triggert</small></td>
+          <td><span id="cur_maxblockms">-</span></td>
+          <td><input type="number" class="tune" data-key="MAXBLOCKMS" id="in_maxblockms" style="width:85px;"></td>
         </tr>
       </tbody>
     </table>

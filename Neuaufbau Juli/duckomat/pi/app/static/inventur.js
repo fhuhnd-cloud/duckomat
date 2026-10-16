@@ -103,7 +103,6 @@ document.querySelectorAll('input[name="startDir"]').forEach(radio => {
   });
 });
 
-// Vorgabe: An (255 / 110)
 document.getElementById('motorOnBtn').addEventListener('click', () => setMotor(255, 110));
 document.getElementById('motorOffBtn').addEventListener('click', () => setMotor(0, 0));
 

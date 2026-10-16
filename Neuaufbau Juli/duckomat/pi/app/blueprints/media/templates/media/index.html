@@ -1,29 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Duckomat – Media{% endblock %}
+{% block title %}Duckomat - Media{% endblock %}
+
 {% block content %}
-<h1>Media</h1>
-<div class="gallery" id="gallery">
-  {% for item in items %}
-    {% if item.type == "video" %}
-    <div class="media-item" data-src="{{ item.src }}">
-      <video muted preload="metadata">
-        <source src="{{ item.src }}#t=0.5" type="video/mp4">
-      </video>
-      <div class="play-icon">&#9658;</div>
-    </div>
-    {% elif item.type == "image" %}
-    <div class="media-item" data-src="{{ item.src }}" data-type="image">
-      <img src="{{ item.src }}" alt="Duckomat Foto">
-    </div>
-    {% endif %}
-  {% else %}
-    <p class="empty-gallery-hint">Noch keine Medien vorhanden.</p>
-  {% endfor %}
+<div class="media-page-wrapper">
+  <div class="video-container">
+    <video id="bgVideo" autoplay loop muted playsinline preload="auto">
+      <source src="{{ url_for('static', filename='videos/GSD_V1.mp4') }}" type="video/mp4">
+      Dein Browser unterstützt das Video-Tag leider nicht.
+    </video>
+  </div>
 </div>
 
-<div class="video-overlay" id="videoOverlay">
-  <video id="fullscreenVideo" loop playsinline></video>
-</div>
-
-<script src="/static/media.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const vid = document.getElementById('bgVideo');
+    if (vid) {
+      vid.muted = true;
+      const playPromise = vid.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.warn("Autoplay blockiert, versuche erneut stumm:", err);
+          vid.muted = true;
+          vid.play();
+        });
+      }
+    }
+  });
+</script>
 {% endblock %}

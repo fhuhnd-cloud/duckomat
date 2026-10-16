@@ -5,7 +5,7 @@
 #include "duck_types.h"
 
 // ============================================================
-// Duckomat Nano-Firmware (Stabile Baseline + FIFO Queue & ServoTimer2)
+// Duckomat Nano-Firmware (fw=41 - Anti-Duplicate Tag Fix)
 // ============================================================
 
 #define PIN_US2_TRIG 3
@@ -21,12 +21,14 @@
 
 const bool TEST_MODE = false;
 
+// Harte mechanische Limits
 const int ABSOLUTE_MIN_PULSE_US = 1000;
 const int ABSOLUTE_MAX_PULSE_US = 2170;
 
 const bool SERVO_AUTO_DETACH_ENABLED = true;
 const unsigned long SERVO_DETACH_DELAY_MS = 250; 
 
+// Kalibrierte Werte passend zur Geometrie
 int g_posRestLeft = 2122;     
 int g_posMid = 1600;          
 int g_posRestRight = 1050;    
@@ -36,9 +38,9 @@ float g_degKickRight = 75.0;
 int g_posKickRight = 1774;
 int g_posKickLeft = 1417;
 
-unsigned long g_kloeppelDelay = 400;      // Bewährter Wert (400 ms)
-unsigned long g_kickHoldMs = 280;         
-unsigned long g_returnHoldMs = 280;       
+unsigned long g_kloeppelDelay = 300;      // 300 ms fixiert
+unsigned long g_kickHoldMs = 260;         
+unsigned long g_returnHoldMs = 240;       
 unsigned long g_returnWechselMs = 180;    
 
 uint16_t g_batchSize = 100;
@@ -52,15 +54,15 @@ unsigned long g_usEchoTimeoutUs = 4500UL;
 const float US_MAX_VALID_CM = 25.0;
 
 unsigned long g_maxSingleDuckBlockMs = 1200;
-unsigned long g_nfcTimeoutMs = 35;
-uint8_t g_nfcRetries = 5;
+unsigned long g_nfcTimeoutMs = 25;        
+uint8_t g_nfcRetries = 2;
 
-const unsigned long NFC_IDLE_POLL_MS = 40; 
+const unsigned long NFC_IDLE_POLL_MS = 20; 
 const unsigned long HELLO_INTERVAL_MS = 1500;
 unsigned long g_uidMaxAgeMs = 3500; 
 
 unsigned long lastDuckTriggerMs = 0;
-unsigned long g_duckCooldownMs = 500; // Bewährter Cooldown-Puffer
+unsigned long g_duckCooldownMs = 500;     // 500 ms fixiert
 
 // -------------------- FIFO UID QUEUE --------------------
 #define UID_QUEUE_SIZE 4
@@ -273,7 +275,7 @@ void sendNack(long token, const __FlashStringHelper* reason) {
 }
 
 void sendHello() {
-  Serial.print(F("HELLO fw=36 test=")); Serial.print(TEST_MODE ? 1 : 0);
+  Serial.print(F("HELLO fw=41 test=")); Serial.print(TEST_MODE ? 1 : 0);
   Serial.print(F(" nfc=")); Serial.print(nfcReady ? 1 : 0);
   Serial.println(F(" nfcmode=CONTINUOUS"));
 }
@@ -521,7 +523,13 @@ void updateNfc(unsigned long now) {
     char decBuf[25];
     uidToDecimal(rawUid, uidLen, decBuf);
 
-    if (strcmp(decBuf, lastPushedUid) != 0 || (now - lastPushedMs > 1500)) {
+    // KERN-FIX:
+    // Wenn es eine ANDERE Ente ist -> SOFORT pushen (0ms Wartezeit für dichte Enten!)
+    // Wenn es DIESELBE Ente ist   -> Mindestens 1800ms warten, damit sie nicht doppelt gepusht wird!
+    bool isDifferentDuck = (strcmp(decBuf, lastPushedUid) != 0);
+    bool debounceExpired = (now - lastPushedMs > 1800);
+
+    if (isDifferentDuck || debounceExpired) {
       strcpy(lastPushedUid, decBuf);
       lastPushedMs = now;
       pushUid(decBuf, now);

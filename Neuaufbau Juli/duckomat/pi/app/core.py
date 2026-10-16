@@ -1,5 +1,6 @@
 # core.py
 import serial
+import serial.tools.list_ports
 import threading
 import time
 import json
@@ -23,6 +24,79 @@ def atomic_write_json(path: Path, data: dict):
 class DuckController:
     RECONNECT_INTERVAL_S = 3
     SERIAL_READ_TIMEOUT_S = 0.1
+
+    @classmethod
+    def find_nano_port(cls, preferred_port=None):
+        """
+        Sucht nach dem Arduino Nano. Prüft zuerst preferred_port, 
+        dann alle verfügbaren seriellen USB-Schnittstellen.
+        """
+        ports = list(serial.tools.list_ports.comports())
+        if not ports:
+            return None
+
+        # 1. Bevorzugten Port prüfen, falls vorhanden
+        if preferred_port:
+            for p in ports:
+                if p.device == preferred_port:
+                    return preferred_port
+
+        # 2. Nach typischen USB-Serial-Konvertern filtern (CH340, FTDI, Arduino)
+        for p in ports:
+            desc = (p.description or "").lower()
+            hwid = (p.hwid or "").lower()
+            # Typische USB-Chips auf Nanos
+            if any(k in desc or k in hwid for k in ["ch340", "ftdi", "cp210", "arduino", "usb serial"]):
+                return p.device
+
+        # 3. Fallback: Erster gefundener ttyUSB/ttyACM bzw. COM-Port
+        for p in ports:
+            dev = p.device.lower()
+            if "ttyusb" in dev or "ttyacm" in dev or dev.startswith("com"):
+                return p.device
+
+        return ports[0].device
+
+    @classmethod
+    def _try_open_serial(cls, port, baud):
+        # Falls der feste Port nicht erreichbar ist, dynamisch suchen
+        target_port = port
+        try:
+            return serial.Serial(target_port, baud, timeout=cls.SERIAL_READ_TIMEOUT_S)
+        except serial.SerialException:
+            fallback = cls.find_nano_port(preferred_port=port)
+            if fallback and fallback != target_port:
+                try:
+                    ser = serial.Serial(fallback, baud, timeout=cls.SERIAL_READ_TIMEOUT_S)
+                    print(f"[core] Automatischer Portwechsel: {port} -> {fallback}")
+                    return ser
+                except serial.SerialException:
+                    pass
+            return None
+
+    @classmethod
+    def _open_serial(cls, port, baud):
+        # Versuch 1: Wunsch-Port
+        ser = cls._try_open_serial(port, baud)
+        if ser is not None:
+            return ser
+
+        # Falls beim ersten Start noch nichts gefunden wurde, 5 Sekunden im Sekundentakt suchen
+        print(f"[core] Warte auf Verbindung an '{port}' oder alternativem Port...")
+        for _ in range(5):
+            time.sleep(1)
+            ser = cls._try_open_serial(port, baud)
+            if ser is not None:
+                return ser
+
+        print("\n" + "=" * 60)
+        print(f"FEHLER: Kein passender serieller Port gefunden (Ziel: '{port}').")
+        print("Vorhandene Ports:")
+        for p in serial.tools.list_ports.comports():
+            print(f" - {p.device}: {p.description} [{p.hwid}]")
+        print("Ursache: Nano nicht angeschlossen oder Berechtigung fehlt.")
+        print("=" * 60 + "\n")
+        raise SystemExit(1)
 
     @staticmethod
     def _try_open_serial(port, baud):
@@ -175,6 +249,8 @@ class DuckController:
                 new_ser = self._try_open_serial(self.port, self.baud)
                 if new_ser is not None:
                     self.ser = new_ser
+                    self.port = new_ser.port  # Aktualisiere port auf den neu gefundenen Port
+
             if new_ser is not None:
                 print(f"[core] Serieller Port {self.port} neu verbunden.")
                 self._send("STATE? token=0")
